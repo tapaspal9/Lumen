@@ -65,10 +65,10 @@
       const db  = await this._db_();
       const rec = await LumenDB.get(db, 'photos', id);
       if (!rec) return;
-      // Soft delete — keeps the row as a tombstone for future sync
+      // Soft delete — tombstone for sync. Original blob is intentionally kept
+      // so that an in-session undo (restorePhoto) can fully recover the entry.
+      // Call deleteOriginal() explicitly only when permanently purging storage.
       await LumenDB.put(db, 'photos', { ...rec, deleted: true, updatedAt: now() });
-      // Remove original blob from this device
-      await this.deleteOriginal(id);
     }
 
     /* ── Edits ─────────────────────────────────────────────────────────── */

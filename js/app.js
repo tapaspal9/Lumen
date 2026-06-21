@@ -361,7 +361,9 @@
   /* ---- Auto enhance -----------------------------------------------------*/
   function autoEnhance(entry, render2) {
     pushHistoryFor(entry);
-    entry.params = Analysis.autoParams(entry.stats, entry.strength);
+    entry.params = Analysis.autoParamsForScene
+      ? Analysis.autoParamsForScene(entry.stats, entry.strength, entry.stats && entry.stats.scene)
+      : Analysis.autoParams(entry.stats, entry.strength);
     entry.edited = true;
     entry.preset = null;
     if (render2) { syncSliders(); render(); renderExplanation(entry); if (window.Panels) Panels.onParamsChanged(entry); }
@@ -603,7 +605,7 @@
   function bind() {
     $('#browseBtn').onclick = $('#addTile').onclick = () => els.fileInput.click();
     els.fileInput.onchange = ev => { loadFiles(ev.target.files); ev.target.value = ''; };
-    $('#autoBtn').onclick = runAuto;
+    $('#autoBtn').onclick = () => (window.Panels && Panels.onAutoClick) ? Panels.onAutoClick() : runAuto();
     $('#batchBtn').onclick = runBatch;
     $('#exportBtn').onclick = () => { const e = getCurrentEntry(); if (e && window.Export) Export.open([e]); };
     $('#resetBtn').onclick = reset;
@@ -726,6 +728,7 @@
     get currentIndex() { return current; },
     getCurrentEntry, selectImage, applyParamsTo, mergeParamsTo,
     requestDelete, switchView, switchMobileTab, openImport: () => els.fileInput.click(),
+    runAuto,
     toast, get strength() { return strength; },
     commitCrop, enterCrop, buildWorkingSource, processInto: (data, params, out) => Imaging.process(data, params, out),
     batch: { preset: batchPreset, auto: batchAuto, crop: batchCrop, exportList: (list) => window.Export && Export.open(list) }

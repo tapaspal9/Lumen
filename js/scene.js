@@ -1,72 +1,126 @@
 /* ============================================================================
- * Lumen — Smart Travel-Photo Detection
- * Heuristic scene classifier from pixel statistics (no model). Buckets the
- * dominant-color palette into hue families and combines with brightness,
- * region balance and edge energy to guess a travel photo type, then maps it
- * to a recommended preset and tailored advice.
- * ==========================================================================*/
+ * Lumen — Smart Scene Classifier  (js/scene.js)
+ * Heuristic pixel-analysis scene detection. 10 scene categories with
+ * portrait / face awareness and night / low-light detection.
+ * No ML model required — runs entirely on existing pixel statistics.
+ * ============================================================================ */
 (function (global) {
   'use strict';
-  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
+  /* ---- Color family from a dominant-color entry -------------------------- */
   function family(c) {
     const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
     const sat = mx === 0 ? 0 : (mx - mn) / mx;
     if (sat < 0.18) return 'neutral';
     if (c.b >= c.r && c.b >= c.g) return 'blue';
     if (c.g >= c.r && c.g >= c.b) return 'green';
-    // warm region: red/orange/yellow. skin = warm but mid, r>g>b moderate
-    if (c.r > 120 && c.r < 245 && c.g > 70 && c.g < 200 && c.g >= c.b && c.r > c.g && (c.r - c.b) > 20 && (c.r - c.b) < 130) return 'skin';
+    // Skin: warm mid-range, r > g > b, not too saturated, not too dark
+    if (c.r > 110 && c.r < 245 && c.g > 65 && c.g < 210 &&
+        c.g >= c.b && c.r > c.g &&
+        (c.r - c.b) > 18 && (c.r - c.b) < 140 &&
+        (c.r - c.g) < 80) return 'skin';
     return 'warm';
   }
 
+  /* ---- Main classifier --------------------------------------------------- */
   function classify(s) {
+    // Build color family weights from dominant-color palette
     const fam = { blue: 0, green: 0, warm: 0, neutral: 0, skin: 0 };
     let tot = 0;
     (s.dominant || []).forEach(c => { fam[family(c)] += c.weight; tot += c.weight; });
     if (tot <= 0) tot = 1;
     for (const k in fam) fam[k] /= tot;
 
-    const m = s.meanL / 255;
-    const r = s.regions || {};
-    const topBright = r.top > r.bottom * 1.08;          // bright sky up top
-    const edge = s.edgeEnergy || 0;
-    const warmCast = s.meanR - s.meanB;
+    const m      = s.meanL / 255;
+    const r      = s.regions || {};
+    const edge   = s.edgeEnergy || 0;
+    const warmCast = (s.meanR || 128) - (s.meanB || 128);
 
-    const C = [];                                        // candidate {type, score, preset}
-    C.push({ type: 'Sunset', preset: 'golden',
-      score: fam.warm * 1.3 + (warmCast > 12 ? 0.4 : 0) + (s.highClip > 0.01 ? 0.2 : 0) + (m > 0.3 && m < 0.62 ? 0.2 : 0) });
-    C.push({ type: 'Landscape', preset: 'vibrant',
-      score: fam.blue * 0.9 + (topBright ? 0.5 : 0) + (edge < 22 ? 0.3 : 0) + fam.green * 0.4 });
-    C.push({ type: 'Nature', preset: 'vibrant',
-      score: fam.green * 1.4 + (edge > 16 ? 0.25 : 0) });
-    C.push({ type: 'Beach & water', preset: 'vibrant',
-      score: fam.blue * 1.0 + (m > 0.55 ? 0.4 : 0) + (edge < 18 ? 0.3 : 0) });
-    C.push({ type: 'City & architecture', preset: 'vibrant',
-      score: fam.neutral * 1.1 + (edge > 26 ? 0.5 : 0) + (!topBright ? 0.2 : 0) });
-    C.push({ type: 'Food', preset: 'vibrant',
-      score: fam.warm * 0.7 + (s.sat > 0.4 ? 0.4 : 0) + (!topBright ? 0.3 : 0) + (edge > 24 ? 0.2 : 0) - fam.blue });
-    C.push({ type: 'People', preset: 'natural',
-      score: fam.skin * 1.8 + (!topBright ? 0.2 : 0) });
+    // Region analysis
+    const topBright    = r.top > (r.bottom || 0) * 1.08;
+    const centerBright = (r.center || 128) > (r.top || 128) * 0.98;
+
+    // Derived flags — used to boost/suppress candidate scores
+    const isNight    = m < 0.24 && (s.stdL || 0) > 18;
+    const isLowLight = m < 0.36 && !isNight;
+    const hasPortraitSkin = fam.skin > 0.13 && centerBright && fam.skin > fam.green * 0.7;
+    const isIndoor   = edge < 20 && !topBright && (fam.warm + fam.neutral) > 0.52 && m > 0.26;
+
+    /* Candidate list — each type scores independently ------------------- */
+    const C = [
+      { type: 'Sunset / Golden Hour', preset: 'cr_golden',
+        score: fam.warm * 1.3 + (warmCast > 12 ? 0.4 : 0) + (s.highClip > 0.01 ? 0.2 : 0) +
+               (m > 0.28 && m < 0.62 ? 0.25 : 0) - (isNight ? 0.6 : 0) },
+
+      { type: 'Landscape', preset: 'ls_vibrant',
+        score: fam.blue * 0.9 + (topBright ? 0.55 : 0) + (edge < 22 ? 0.3 : 0) +
+               fam.green * 0.35 - (hasPortraitSkin ? 0.6 : 0) - (isNight ? 0.3 : 0) },
+
+      { type: 'Nature', preset: 'ls_deep_greens',
+        score: fam.green * 1.45 + (edge > 14 ? 0.2 : 0) -
+               (hasPortraitSkin ? 0.6 : 0) - (isIndoor ? 0.3 : 0) },
+
+      { type: 'Beach & Water', preset: 'ls_ocean',
+        score: fam.blue * 1.05 + (m > 0.52 ? 0.4 : 0) + (edge < 18 ? 0.3 : 0) -
+               (hasPortraitSkin ? 0.35 : 0) - (isNight ? 0.4 : 0) },
+
+      { type: 'City & Architecture', preset: 'ar_urban',
+        score: fam.neutral * 1.1 + (edge > 26 ? 0.55 : 0) + (!topBright ? 0.2 : 0) -
+               (hasPortraitSkin ? 0.35 : 0) },
+
+      { type: 'Food', preset: 'fo_restaurant',
+        score: fam.warm * 0.65 + (s.sat > 0.38 ? 0.35 : 0) + (!topBright ? 0.25 : 0) +
+               (edge > 22 ? 0.2 : 0) - fam.blue * 0.8 -
+               (hasPortraitSkin ? 0.45 : 0) - (isNight ? 0.2 : 0) },
+
+      { type: 'Portrait', preset: 'po_natural', isPortrait: true,
+        score: fam.skin * 1.85 + (hasPortraitSkin ? 1.2 : 0) + (!topBright ? 0.2 : 0) -
+               (m < 0.2 ? 0.4 : 0) },
+
+      { type: 'Night', preset: 'ar_night_city',
+        score: (isNight ? 1.6 : 0) + (m < 0.28 && !isNight ? 0.4 : 0) },
+
+      { type: 'Low Light', preset: 'cr_film',
+        score: (isLowLight ? 1.0 : 0) + (m < 0.36 && !isNight ? 0.4 : 0) +
+               (edge > 12 ? 0.15 : 0) - (isNight ? 0.8 : 0) },
+
+      { type: 'Indoor', preset: 'tr_luxury',
+        score: (isIndoor ? 1.0 : 0) + (edge < 16 && !topBright && m > 0.26 ? 0.35 : 0) -
+               (topBright ? 0.5 : 0) },
+    ];
 
     C.sort((a, b) => b.score - a.score);
     const best = C[0], second = C[1];
-    const conf = clamp(0.45 + (best.score - second.score) * 0.6 + best.score * 0.15, 0.4, 0.97);
-    return { type: best.type, preset: best.preset, confidence: conf, families: fam };
+    const conf = clamp(0.44 + (best.score - second.score) * 0.55 + best.score * 0.14, 0.38, 0.97);
+
+    return {
+      type:         best.type,
+      preset:       best.preset,
+      confidence:   conf,
+      families:     fam,
+      isPortrait:   !!(best.isPortrait),
+      hasFaces:     hasPortraitSkin,
+      isNight,
+      isLowLight,
+      candidates:   C.slice(0, 3),   // top-3 for the confirm dialog
+    };
   }
 
-  function advice(scene) {
-    switch (scene.type) {
-      case 'Sunset': return 'Warm light suits a cinematic golden grade — protect the highlights and let color glow.';
-      case 'Landscape': return 'Open vista — a vibrant grade with extra clarity makes skies and detail pop.';
-      case 'Nature': return 'Lush greenery rewards vibrance over raw saturation to keep foliage natural.';
-      case 'Beach & water': return 'Bright water scene — lift clarity and contrast, watch for blown highlights.';
-      case 'City & architecture': return 'Structured scene — clarity and contrast emphasise lines; consider B&W.';
-      case 'Food': return 'Close subject — boost vibrance and warmth, keep it crisp and appetising.';
-      case 'People': return 'Subject present — a natural grade protects skin tones; avoid over-saturation.';
-      default: return 'Balanced grade recommended.';
-    }
-  }
+  /* ---- Scene advice ----------------------------------------------------- */
+  const ADVICE = {
+    'Sunset / Golden Hour': 'Warm light suits a cinematic golden grade — protect highlights and let color glow.',
+    'Landscape':            'Open vista — a vibrant grade with extra clarity makes skies and detail pop.',
+    'Nature':               'Lush greenery rewards vibrance over raw saturation to keep foliage natural.',
+    'Beach & Water':        'Bright water scene — lift clarity and contrast, watch for blown highlights.',
+    'City & Architecture':  'Structured scene — clarity and contrast emphasise lines; consider B&W.',
+    'Food':                 'Close subject — boost vibrance and warmth, keep it crisp and appetising.',
+    'Portrait':             'Human subject detected — portrait-safe mode protects skin tones and texture.',
+    'Night':                'Night scene — lift shadows carefully, protect light sources, moody grade.',
+    'Low Light':            'Low-light — gentle shadow recovery and noise reduction recommended.',
+    'Indoor':               'Indoor scene — correct artificial light cast, keep colors warm and natural.',
+  };
+  function advice(scene) { return ADVICE[scene.type] || 'Balanced grade recommended.'; }
 
   global.Scene = { classify, advice };
 })(window);

@@ -175,6 +175,31 @@
     async loadOriginal(photoId)  { return this._provider.loadOriginal(photoId); }
     async hasOriginal(photoId)   { return this._provider.hasOriginal(photoId); }
 
+    /**
+     * Restore a soft-deleted photo (undo delete within the same session).
+     * The original blob is kept on delete specifically to support this.
+     * @param {object} entry  The in-memory entry returned by deletePhoto
+     */
+    async restorePhoto(entry) {
+      await this._provider.savePhoto({
+        id:         entry.id,
+        filename:   entry.name,
+        capturedAt: entry.capturedAt  || null,
+        importedAt: entry.importedAt  || null,
+        width:      entry.w,
+        height:     entry.h,
+        exif:       entry.exif        || null,
+        exifApp1:   entry.exifApp1    || null,
+        exifGpsOff: entry.exifGpsOff  ?? -1,
+        hasGPS:     entry.hasGPS      || false,
+        fileSize:   entry.fileSize    || null,
+        mimeType:   entry.mimeType    || null,
+        rating:     entry.rating      || 0,
+        flag:       entry.flag        || null,
+        deleted:    false,
+      });
+    }
+
     /* ── Selection ───────────────────────────────────────────────────────── */
 
     /**

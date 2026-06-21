@@ -196,9 +196,43 @@
     return out;
   }
 
+  /* ---- Portrait-safe auto parameters ------------------------------------
+   * Dramatically reduced clarity, sharpness, saturation and contrast to
+   * protect skin texture, natural skin tones and facial brightness.
+   * Called automatically when Scene.isPortrait is true.               */
+  function autoParamsPortrait(s, strengthKey) {
+    const k = (STRENGTH[strengthKey] != null ? STRENGTH[strengthKey] : 1.0) * 0.55;
+    const m = s.meanL / 255;
+    const wb = whiteBalance(s, k * 0.75);
+    const round = v => Math.round(clamp(v, -100, 100));
+    return {
+      exposure:    round(clamp((0.47 - m) * 130, -30, 30) * k),
+      contrast:    round(clamp((46 - s.stdL) * 0.55, -4, 16) * k),
+      highlights:  round(-clamp(s.highClip * 220 + (m > 0.6 ? 7 : 0), 0, 36) * k),
+      shadows:     round(clamp(s.shadowClip * 180 + (m < 0.4 ? 9 : 0), 0, 32) * k),
+      whites:      round(clamp((250 - s.whitePoint) * 0.55, -7, 20) * k),
+      blacks:      round(clamp(-(s.blackPoint - 5) * 0.75, -20, 12) * k),
+      temperature: Math.round(wb.temp),
+      tint:        Math.round(wb.tint),
+      saturation:  round(clamp((0.3 - s.sat) * 18, -4, 7) * k),
+      vibrance:    round(clamp((0.36 - s.sat) * 70, 0, 18) * k),
+      sharpness:   round(10 * k),   // much lower than landscape
+      clarity:     round(2 * k),    // minimal — protects skin texture
+      noise:       round(strengthKey === 'subtle' ? 0 : 7 * k),
+      vignette:    strengthKey === 'dramatic' ? -7 : 0,
+    };
+  }
+
+  /* ---- Scene-aware dispatcher -------------------------------------------
+   * Use this instead of autoParams when the scene is known.             */
+  function autoParamsForScene(s, strengthKey, scene) {
+    if (scene && scene.isPortrait) return autoParamsPortrait(s, strengthKey);
+    return autoParams(s, strengthKey);
+  }
+
   global.Analysis = {
     STRENGTH, exposureScore, colorHarmonyScore, colorCast,
-    detectIssues, whiteBalance, autoParams, explain,
-    suggestCrop, cropRationale
+    detectIssues, whiteBalance, autoParams, autoParamsPortrait, autoParamsForScene,
+    explain, suggestCrop, cropRationale
   };
 })(window);
