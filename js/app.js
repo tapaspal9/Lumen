@@ -123,7 +123,23 @@
       try { exif = window.Exif ? Exif.parse(await f.arrayBuffer()) : null; } catch (e) { exif = null; }
       const url = URL.createObjectURL(f);
       const img = new Image();
-      img.onload = () => { addImage(img, f.name, url, exif); if (--pending === 0) finalize(); };
+      img.onload = async () => {
+        if (window.Store) {
+          // Persist path: save metadata + original blob to IndexedDB
+          URL.revokeObjectURL(url);   // Store creates its own object URL
+          const entry = await Store.addPhoto(f, img, exif);
+          try {
+            const a = imageDataFrom(img, ANALYZE_MAX);
+            entry.stats = Imaging.analyze(a.data);
+            if (window.Scene) entry.stats.scene = Scene.classify(entry.stats);
+          } catch (e) { /* tainted canvas */ }
+          library.push(entry);
+          renderFilm();
+        } else {
+          addImage(img, f.name, url, exif);
+        }
+        if (--pending === 0) finalize();
+      };
       img.onerror = () => { if (--pending === 0) finalize(); };
       img.src = url;
     });
@@ -173,6 +189,8 @@
     updateChrome();          // make rail visible BEFORE rendering histograms
     loadWorking(e);
     switchView('editor');
+    // On phone: jump straight to the canvas after selecting a photo
+    if (window.innerWidth <= 640) switchMobileTab('edit');
   }
 
   // (Re)build the active preview buffers from the entry's current crop + analyze.
@@ -327,7 +345,14 @@
   function pushHistoryFor(e) { e.history.push(snapshot(e)); if (e.history.length > 40) e.history.shift(); }
   function pushHistory() { if (current >= 0) pushHistoryFor(library[current]); }
   let commitT;
-  function commitEdit() { clearTimeout(commitT); commitT = setTimeout(updateChrome, 60); }
+  function commitEdit() {
+    clearTimeout(commitT);
+    commitT = setTimeout(() => {
+      updateChrome();
+      // Persist the current edit state to IndexedDB
+      if (window.Store && current >= 0) Store.saveEdit(library[current]).catch(console.error);
+    }, 60);
+  }
   function markEdited() {
     const e = library[current];
     if (!e.edited) { e.edited = true; renderFilm(); }
@@ -398,9 +423,24 @@
   function switchView(v) {
     view = v;
     document.body.classList.toggle('view-dashboard', v === 'dashboard');
-    $('#galleryBtn').classList.toggle('on', v === 'dashboard');
+    const gb = $('#galleryBtn'); if (gb) gb.classList.toggle('on', v === 'dashboard');
     if (v === 'dashboard' && window.Dashboard) Dashboard.refresh();
   }
+
+  /* ---- Mobile tab switching (phone only) --------------------------------*/
+  // Controlled by body classes: mob-lib | mob-edit | mob-adjust
+  // Only meaningful on screens ≤640px — no-op on tablet/desktop.
+  const MOB_TABS = ['lib', 'edit', 'adjust'];
+  function switchMobileTab(tab) {
+    if (!MOB_TABS.includes(tab)) return;
+    document.body.classList.remove('mob-lib', 'mob-edit', 'mob-adjust');
+    document.body.classList.add('mob-' + tab);
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    const ids = { lib: 'navLib', edit: 'navEdit', adjust: 'navAdjust' };
+    const btn = document.getElementById(ids[tab]);
+    if (btn) btn.classList.add('active');
+  }
+  window.switchMobileTab = switchMobileTab;
 
   /* ---- Delete / undo-protected ------------------------------------------*/
   function requestDelete(i) {
@@ -410,6 +450,7 @@
   function doDelete(i) {
     const e = library[i]; if (!e) return;
     library.splice(i, 1);
+    if (window.Store) Store.deletePhoto(e.id).catch(console.error);
     if (current === i) {
       current = -1;
       if (library.length) selectImage(Math.min(i, library.length - 1));
@@ -420,6 +461,8 @@
   }
   function restoreEntry(entry, i) {
     library.splice(Math.min(i, library.length), 0, entry);
+    // Un-mark the tombstone in IndexedDB (blob was kept for exactly this case)
+    if (window.Store) Store.restorePhoto(entry).catch(console.error);
     renderFilm();
     selectImage(library.indexOf(entry));
     toast('Photo restored');
@@ -568,8 +611,17 @@
     $('#strengthSeg').querySelectorAll('button').forEach(b => b.onclick = () => {
       strength = b.dataset.k; syncStrengthSeg();
       if (current >= 0) library[current].strength = strength;
+      if (window.Store) Store.saveSetting('strength', strength).catch(console.error);
     });
-    $('#galleryBtn').onclick = () => switchView(view === 'dashboard' ? 'editor' : 'dashboard');
+    // Mobile bottom nav
+    document.getElementById('navLib')    .onclick = () => switchMobileTab('lib');
+    document.getElementById('navEdit')   .onclick = () => switchMobileTab('edit');
+    document.getElementById('navAdjust') .onclick = () => switchMobileTab('adjust');
+    // Set initial mobile body class
+    document.body.classList.add('mob-edit');
+
+    const gb = $('#galleryBtn');
+    if (gb) gb.onclick = () => switchView(view === 'dashboard' ? 'editor' : 'dashboard');
     $('#cropBtn').onclick = enterCrop;
     // compare
     $('#compareBtn').onclick = () => {
@@ -673,7 +725,7 @@
     get library() { return library; },
     get currentIndex() { return current; },
     getCurrentEntry, selectImage, applyParamsTo, mergeParamsTo,
-    requestDelete, switchView, openImport: () => els.fileInput.click(),
+    requestDelete, switchView, switchMobileTab, openImport: () => els.fileInput.click(),
     toast, get strength() { return strength; },
     commitCrop, enterCrop, buildWorkingSource, processInto: (data, params, out) => Imaging.process(data, params, out),
     batch: { preset: batchPreset, auto: batchAuto, crop: batchCrop, exportList: (list) => window.Export && Export.open(list) }
@@ -684,6 +736,44 @@
     updateChrome();
     if (window.Panels) Panels.init();
     if (window.Dashboard) Dashboard.init();
+
+    /* ── Phase 1: initialise persistent storage ─────────────────────────── */
+    if (window.LumenStore && window.LocalProvider) {
+      try {
+        const provider = new LocalProvider();
+        window.Store = new LumenStore(provider);
+        // Restore saved editing-strength preference
+        const savedStrength = await Store.loadSetting('strength', 'professional');
+        strength = savedStrength; syncStrengthSeg();
+        // Load all persisted photos from IndexedDB
+        const stored = await Store.init();
+        for (const entry of stored) {
+          const blob = await Store.loadOriginal(entry.id);
+          if (!blob) continue; // original not on this device (future: fetch on demand)
+          await new Promise(resolve => {
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+              entry.img = img; entry.url = url;
+              try {
+                const ws = imageDataFrom(img, ANALYZE_MAX);
+                entry.stats = Imaging.analyze(ws.data);
+                if (window.Scene) entry.stats.scene = Scene.classify(entry.stats);
+              } catch (e) { /* tainted */ }
+              library.push(entry);
+              resolve();
+            };
+            img.onerror = resolve;
+            img.src = url;
+          });
+        }
+      } catch (err) { console.warn('[Lumen] Store init error:', err); }
+    }
+
+    // If we restored stored photos, skip demo content entirely
+    if (library.length) { renderFilm(); selectImage(0); return; }
+
+    /* ── First-run demo content ──────────────────────────────────────────── */
     // Try real demo photos first; fall back to synthetic flawed scenes offline.
     const demos = [
       ['lumen-kyoto', 'Kyoto-alley.jpg'],

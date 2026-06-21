@@ -536,3 +536,142 @@ body.view-dashboard .dashboard { display: flex; }
 .xp-cm { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xp-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px 22px; }
 .xp-foot .tbtn { height: 38px; padding: 0 20px; }
+
+/* ===== Responsive — Tablet & Mobile =====================================*/
+
+/* ---- Mobile bottom navigation ----------------------------------------- */
+.mobile-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg-1);
+  border-top: 1px solid var(--line);
+  z-index: 50;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-tabs { display: flex; height: 56px; }
+.nav-tab {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  color: var(--text-3); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; font-weight: 600; font-family: var(--sans);
+  background: none; border: none; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: color .12s;
+}
+.nav-tab svg { width: 20px; height: 20px; flex: none; }
+.nav-tab.active { color: var(--accent-text); }
+
+/* ---- Tablet (641–1024px) ----------------------------------------------- */
+@media (max-width: 1024px) and (min-width: 641px) {
+  :root { --rail-w: 268px; }
+  .film { display: none; }
+  .main, .main.solo { grid-template-columns: 1fr var(--rail-w); }
+  #batchBtn { display: none; }
+  .tbtn .btn-label { display: none; }
+  .tbtn { gap: 0; padding: 0 10px; }
+  #exportBtn .btn-label { display: inline; }
+  #exportBtn { padding: 0 14px; gap: 7px; }
+}
+
+/* ---- Phone (≤640px) ---------------------------------------------------- */
+@media (max-width: 640px) {
+  /* Bottom nav visible */
+  .mobile-nav { display: block; }
+
+  /* App: shrink to leave room for fixed bottom nav */
+  .app { height: calc(100dvh - 56px - env(safe-area-inset-bottom, 0px)); }
+
+  /* Topbar: hide secondary buttons */
+  #galleryBtn, #batchBtn, #undoBtn, #resetBtn { display: none; }
+  .file-name { max-width: 130px; font-size: 11px; }
+  .topbar { gap: 8px; padding: 0 12px; }
+
+  /* Main: block container — panels layer absolutely */
+  .main, .main.solo {
+    display: block; position: relative;
+    overflow: hidden; height: 100%;
+  }
+
+  /* All three panels fill the container */
+  .film, .stage, .rail {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    will-change: transform, opacity;
+  }
+
+  /* Default (mob-edit): stage centre, film left, rail right */
+  .film  { opacity: 0; pointer-events: none; transform: translateX(-100%); z-index: 1; }
+  .stage { opacity: 1; pointer-events: auto;  transform: translateX(0);     z-index: 2; padding: 14px 10px 10px; }
+  .rail  { opacity: 0; pointer-events: none;  transform: translateX(100%);  z-index: 1; border-left: none; overflow-y: auto; }
+
+  body.mob-lib .film  { opacity: 1; pointer-events: auto;  transform: translateX(0);     }
+  body.mob-lib .stage { opacity: 0; pointer-events: none;  transform: translateX(100%);  }
+  body.mob-lib .rail  { opacity: 0; pointer-events: none;  transform: translateX(100%);  }
+
+  body.mob-edit .film  { opacity: 0; pointer-events: none; transform: translateX(-100%); }
+  body.mob-edit .stage { opacity: 1; pointer-events: auto; transform: translateX(0);     }
+  body.mob-edit .rail  { opacity: 0; pointer-events: none; transform: translateX(100%);  }
+
+  body.mob-adjust .film  { opacity: 0; pointer-events: none; transform: translateX(-100%); }
+  body.mob-adjust .stage { opacity: 0; pointer-events: none; transform: translateX(-100%); }
+  body.mob-adjust .rail  { opacity: 1; pointer-events: auto; transform: translateX(0);     }
+
+  /* Filmstrip: 3-column grid on mobile */
+  .film { display: flex; flex-direction: column; background: var(--bg-1); }
+  .film-list {
+    flex: 1; display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px; padding: 3px; overflow-y: auto;
+  }
+  .thumb { width: 100%; aspect-ratio: 1; border-radius: 4px; }
+  .film-foot { padding: 8px; }
+  .add-tile { aspect-ratio: 1; }
+
+  /* Canvas: respect mobile viewport */
+  .canvas-wrap canvas { max-height: calc(100dvh - 170px); }
+
+  /* Stage tools: full-width bar at bottom */
+  .stage-tools {
+    left: 8px; right: 8px; bottom: 8px;
+    transform: none; justify-content: space-evenly; border-radius: 14px;
+  }
+  .stool { flex: 1; justify-content: center; height: 44px; font-size: 12px; }
+
+  /* Touch targets — 44px minimum everywhere */
+  button, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .tbtn { height: 40px; min-width: 44px; padding: 0 12px; }
+  .seg button { height: 38px; }
+  .auto-btn { height: 52px; font-size: 14px; }
+  .auto-btn svg { width: 20px; height: 20px; }
+  .slider input[type=range]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8.5px; }
+  .slider input[type=range]::-moz-range-thumb { width: 20px; height: 20px; }
+  .intensity input[type=range]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8.5px; }
+  .intensity input[type=range]::-moz-range-thumb { width: 20px; height: 20px; }
+  .sug-apply { height: 38px; padding: 0 16px; }
+  .preset-card { padding: 13px 14px; }
+  .gbtn { height: 40px; }
+
+  /* Dashboard: compact */
+  .dash-head { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+  .dash-title h1 { font-size: 18px; }
+  .dash-grid {
+    padding: 14px 12px 60px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;
+  }
+
+  /* Export modal: bottom sheet on phone */
+  .xport { align-items: flex-end; }
+  .xp-card { border-radius: 20px 20px 0 0; max-width: 100vw; max-height: 88vh; }
+  .xp-body { grid-template-columns: 1fr; gap: 0; }
+
+  /* Crop overlay: wrap controls for small screens */
+  .crop-top { height: auto; min-height: 50px; flex-wrap: wrap; padding: 8px 12px; gap: 6px; }
+  .crop-ratios { order: 3; width: 100%; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .crop-ratios::-webkit-scrollbar { display: none; }
+  .crop-ratios button { padding: 0 10px; height: 34px; }
+  .crop-bar { height: auto; flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+  .crop-straighten input[type=range] { width: 110px; }
+  .crop-auto, .crop-pre, .crop-reset, .crop-done { height: 40px; }
+}
