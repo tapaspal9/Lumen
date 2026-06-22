@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lumen — Travel Photo Studio</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1b1c23" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand"><div class="mark"></div><b>Lumen</b><span>Travel Studio</span></div>
+    <div class="file-name" id="fileName">No image loaded</div>
+    <div class="spacer"></div>
+    <button class="tbtn" id="galleryBtn" title="Photo dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="btn-label">Gallery</span>
+    </button>
+    <button class="tbtn" id="undoBtn" disabled title="Undo (⌘Z)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+      <span class="btn-label">Undo</span>
+    </button>
+    <button class="tbtn" id="resetBtn" disabled><span class="btn-label">Reset</span></button>
+    <button class="tbtn" id="batchBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+      <span class="btn-label">Auto-enhance all</span>
+    </button>
+    <button class="tbtn primary" id="exportBtn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      <span class="btn-label">Export for web</span>
+    </button>
+  </header>
+
+  <!-- Main -->
+  <div class="main solo" id="main">
+    <!-- Filmstrip -->
+    <aside class="film" id="film">
+      <div class="film-head"><span>Library</span><span id="libCount">0</span></div>
+      <div class="film-list" id="filmList"></div>
+      <div class="film-foot">
+        <button class="add-tile" id="addTile">+</button>
+      </div>
+    </aside>
+
+    <!-- Stage -->
+    <main class="stage empty" id="stage">
+      <div class="processing-bar" id="procBar"></div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="afterCanvas"></canvas>
+        <canvas id="beforeCanvas"></canvas>
+        <span class="tag-before">Before</span>
+        <span class="tag-after">After</span>
+        <div class="divider" id="divider"></div>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div class="ring">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        </div>
+        <h2>Drop your travel photos here</h2>
+        <p>Lumen inspects every pixel — RGB, luminance, white balance, color distribution — then auto-corrects for publish-ready results. Originals are always preserved.</p>
+        <button class="tbtn primary" id="browseBtn">Browse files</button>
+      </div>
+
+      <div class="stage-tools" id="stageTools">
+        <button class="stool" id="cropBtn" title="Crop & straighten">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v16h16M2 6h16v16"/></svg>
+          Crop
+        </button>
+        <button class="stool" id="compareBtn" title="Before / after split">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
+          Compare
+        </button>
+        <button class="stool" id="holdBtn" title="Hold to view original">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          Original
+        </button>
+      </div>
+    </main>
+
+    <!-- Right rail -->
+    <aside class="rail" id="rail">
+      <div id="railEmpty" class="empty-rail">
+        Load a photo to begin.<br>Lumen will analyze it and show its findings here.
+      </div>
+      <div id="railBody" style="display:none">
+
+        <!-- Auto -->
+        <div class="auto-block">
+          <button class="auto-btn" id="autoBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3Z"/></svg>
+            Auto-Enhance
+          </button>
+          <button class="power-btn" id="powerBtn" title="Power enhance — aggressive corrections for maximum impact">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+            Power
+          </button>
+          <div class="strength">
+            <div class="strength-label-row">
+              <span class="strength-label">Editing strength</span>
+              <button class="stack-btn" id="stackToggle" title="Stack: add to existing edits rather than replace">Stack</button>
+            </div>
+            <div class="seg" id="strengthSeg">
+              <button data-k="subtle">Subtle</button>
+              <button data-k="natural">Natural</button>
+              <button data-k="professional" class="on">Pro</button>
+              <button data-k="dramatic">Dramatic</button>
+            </div>
+          </div>
+          <div class="preset-mode-row" id="presetModeRow">
+            <span class="preset-mode-label">Preset mode</span>
+            <div class="seg preset-mode-seg">
+              <button id="modeReplace" class="on">Replace</button>
+              <button id="modeLayer">Layer</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analysis -->
+        <section>
+          <div class="sec-head"><span>Analysis</span></div>
+          <div class="sec-body">
+            <div class="scores">
+              <div class="score-card" data-ctrl="exposure">
+                <div class="sc-head"><div class="lbl">Exposure</div><div class="val" id="expScore">—</div></div>
+                <div class="score-bar"><i id="expBar" style="width:0"></i></div>
+                <div class="sc-ctrl-row"><span class="sc-ctrl-label">Adjust</span><input type="range" class="sc-range" id="expCtrl" min="-100" max="100" step="1" value="0"></div>
+              </div>
+              <div class="score-card" data-ctrl="vibrance">
+                <div class="sc-head"><div class="lbl">Color harmony</div><div class="val" id="harmScore">—</div></div>
+                <div class="score-bar"><i id="harmBar" style="width:0"></i></div>
+                <div class="sc-ctrl-row"><span class="sc-ctrl-label">Vibrance</span><input type="range" class="sc-range" id="harmCtrl" min="-100" max="100" step="1" value="0"></div>
+              </div>
+              <div class="score-card" data-ctrl="sharpness">
+                <div class="sc-head"><div class="lbl">Sharpness</div><div class="val" id="sharpScore">—</div></div>
+                <div class="score-bar"><i id="sharpBar" style="width:0"></i></div>
+                <div class="sc-ctrl-row"><span class="sc-ctrl-label">Sharpen</span><input type="range" class="sc-range" id="sharpCtrl" min="0" max="100" step="1" value="0"></div>
+              </div>
+              <div class="score-card" data-ctrl="contrast">
+                <div class="sc-head"><div class="lbl">Tonal balance</div><div class="val" id="toneScore">—</div></div>
+                <div class="score-bar"><i id="toneBar" style="width:0"></i></div>
+                <div class="sc-ctrl-row"><span class="sc-ctrl-label">Contrast</span><input type="range" class="sc-range" id="toneCtrl" min="-50" max="50" step="1" value="0"></div>
+              </div>
+            </div>
+            <div class="sec-head" style="padding-left:0">Quick fixes</div>
+            <div class="quick-fix" id="quickFix"></div>
+            <div class="sec-head" style="padding-left:0">Detected issues</div>
+            <div class="issues" id="issues"></div>
+            <div class="sec-head" style="padding-left:0">White balance suggestion</div>
+            <div class="wb-rec">
+              <div class="wb-swatch" id="wbSwatch"></div>
+              <div class="txt" id="wbText">—</div>
+            </div>
+            <div class="sec-head" style="padding-left:0">Dominant colors</div>
+            <div class="dom-row" id="domRow"></div>
+            <div class="sec-head" style="padding-left:0;margin-top:12px">Tonal profiles</div>
+            <div class="tonal-profiles" id="tonalProfiles"></div>
+          </div>
+        </section>
+
+        <!-- AI Suggestions -->
+        <section>
+          <div class="sec-head" id="suggestHead"><span>AI suggestions</span></div>
+          <div class="sec-body" id="suggestBody"></div>
+        </section>
+
+        <!-- Presets -->
+        <section>
+          <div class="sec-head"><span>Presets</span><span style="color:var(--text-3)">adjustable</span></div>
+          <div class="sec-body" id="presetsBody"></div>
+        </section>
+
+        <!-- Histograms -->
+        <section>
+          <div class="sec-head"><span>Histograms</span><span style="color:var(--text-3)">live</span></div>
+          <div class="sec-body">
+            <div class="hist-box"><div class="cap"><span>RGB</span><span>0 – 255</span></div><canvas id="histRGB"></canvas></div>
+            <div class="hist-box"><div class="cap"><span>Luminance</span><span>shadows → highlights</span></div><canvas id="histLuma"></canvas></div>
+          </div>
+        </section>
+
+        <!-- Camera metadata -->
+        <section>
+          <div class="sec-head"><span>Camera</span><span style="color:var(--text-3)">EXIF</span></div>
+          <div class="sec-body" id="metaBody"></div>
+        </section>
+
+        <!-- Explanation -->
+        <section>
+          <div class="sec-head"><span>What Lumen changed</span></div>
+          <div class="sec-body">
+            <div class="explain empty" id="explain">Run Auto-Enhance to see a breakdown of every correction.</div>
+          </div>
+        </section>
+
+        <!-- Manual -->
+        <section>
+          <div class="sec-head"><span>Manual adjustments</span></div>
+          <div class="sec-body sliders" id="sliders"></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Dashboard / gallery view -->
+  <div class="dashboard" id="dashboard">
+    <div class="dash-head">
+      <button class="tbtn" id="dashBack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        Back to editor
+      </button>
+      <div class="dash-title">
+        <h1 id="dashCount">0 photos</h1>
+        <p id="dashSub">Your library is empty</p>
+      </div>
+      <button class="tbtn primary" id="dashImport">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Import photos
+      </button>
+    </div>
+    <div class="dash-grid" id="dashGrid"></div>
+    <div class="batch-bar" id="batchBar"></div>
+  </div>
+</div>
+
+<!-- Crop & composition overlay -->
+<div class="crop-overlay" id="cropOverlay">
+  <div class="crop-top">
+    <div class="crop-title">Crop &amp; composition</div>
+    <div class="crop-ratios" id="cropRatios">
+      <button data-r="orig" class="on">Original</button>
+      <button data-r="1.7778">16:9</button>
+      <button data-r="1.3333">4:3</button>
+      <button data-r="1.5">3:2</button>
+      <button data-r="1">1:1</button>
+      <button data-r="free">Custom</button>
+    </div>
+    <button class="crop-x" id="cropCancel" title="Cancel">✕</button>
+  </div>
+  <div class="crop-area" id="cropArea">
+    <div class="crop-stage" id="cropStage">
+      <canvas id="cropCanvas"></canvas>
+      <div class="crop-frame" id="cropFrame">
+        <div class="crop-grid"></div>
+        <span class="ch n"></span><span class="ch s"></span><span class="ch e"></span><span class="ch w"></span>
+        <span class="ch nw"></span><span class="ch ne"></span><span class="ch sw"></span><span class="ch se"></span>
+      </div>
+    </div>
+  </div>
+  <div class="crop-bar">
+    <button class="crop-auto" id="cropAuto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3Z"/></svg>
+      Auto-crop
+    </button>
+    <div class="crop-straighten">
+      <span class="cs-label">Straighten</span>
+      <input type="range" id="cropAngle" min="-15" max="15" step="0.1" value="0">
+      <span class="cs-val" id="cropAngleVal">0°</span>
+    </div>
+    <div class="crop-spacer"></div>
+    <button class="crop-pre" id="cropPreview" title="Hold to preview result">Preview</button>
+    <button class="crop-reset" id="cropReset">Reset</button>
+    <button class="crop-done" id="cropDone">Done</button>
+  </div>
+</div>
+
+<!-- Web export modal -->
+<div class="xport" id="xport"></div>
+
+<!-- Confirm modal -->
+<div class="modal" id="modal">
+  <div class="modal-backdrop" id="modalBackdrop"></div>
+  <div class="modal-card">
+    <h3 id="modalTitle">Delete photo?</h3>
+    <p id="modalBody"></p>
+    <div class="modal-actions">
+      <button class="tbtn" id="modalNo">Cancel</button>
+      <button class="tbtn danger" id="modalYes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile bottom navigation (phones only) -->
+<nav class="mobile-nav" id="mobileNav" aria-label="Main navigation">
+  <div class="nav-tabs">
+    <button class="nav-tab" id="navLib">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Library
+    </button>
+    <button class="nav-tab active" id="navEdit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      Edit
+    </button>
+    <button class="nav-tab" id="navAdjust">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h8M4 18h12"/><circle cx="18" cy="6" r="2"/><circle cx="14" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+      Adjust
+    </button>
+  </div>
+</nav>
+
+<input type="file" id="fileInput" accept="image/*" multiple hidden />
+<div class="toast" id="toast"></div>
+
+<!-- Core data layer (Phase 0) -->
+<script src="js/core/db.js"></script>
+<script src="js/core/storage-provider.js"></script>
+<script src="js/core/local-provider.js"></script>
+<script src="js/core/store.js"></script>
+
+<script src="js/imaging.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/suggestions.js"></script>
+<script src="js/exif.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/histogram.js"></script>
+<script src="js/app.js"></script>
+<script src="js/crop.js"></script>
+<script src="js/export.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/dashboard.js"></script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="tweaks-app.jsx"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then(() => console.log('[Lumen] Service worker registered'))
+      .catch(err => console.warn('[Lumen] SW registration failed:', err));
+  }
+</script>
+</body>
+</html>
