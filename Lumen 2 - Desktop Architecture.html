@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Lumen 2 — Modular Desktop Architecture</title>
+<style>
+:root{
+  --accent:      oklch(0.74 0.13 232);
+  --accent-2:    oklch(0.74 0.13 300);
+  --accent-soft: oklch(0.74 0.13 232 / 0.13);
+  --accent-line: oklch(0.74 0.13 232 / 0.38);
+  --accent-text: oklch(0.82 0.11 232);
+  --bg-0: oklch(0.165 0.004 270);
+  --bg-1: oklch(0.205 0.004 270);
+  --bg-2: oklch(0.245 0.005 270);
+  --bg-3: oklch(0.29  0.006 270);
+  --line:   oklch(1 0 0 / 0.08);
+  --line-2: oklch(1 0 0 / 0.05);
+  --text:   oklch(0.94 0.003 270);
+  --text-2: oklch(0.74 0.004 270);
+  --text-3: oklch(0.56 0.004 270);
+  --ok:      oklch(0.78 0.13 150); --ok-soft:   oklch(0.78 0.13 150 / 0.13);
+  --warn:    oklch(0.80 0.13 75);  --warn-soft: oklch(0.80 0.13 75  / 0.13);
+  --bad:     oklch(0.70 0.15 25);  --bad-soft:  oklch(0.70 0.15 25  / 0.13);
+  --radius: 10px;
+  --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+  --sans: "Helvetica Neue",Helvetica,system-ui,-apple-system,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:var(--sans);
+  background:
+    radial-gradient(1000px 600px at 82% -5%, oklch(0.74 0.13 232 / 0.10),transparent 60%),
+    radial-gradient(800px 500px at 4% 0%, oklch(0.74 0.13 300 / 0.07),transparent 55%),
+    var(--bg-0);
+  background-attachment:fixed;
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  line-height:1.6;
+  letter-spacing:0.01em;
+}
+.wrap{max-width:960px;margin:0 auto;padding:0 28px 120px;}
+
+/* type */
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);font-weight:600;}
+h1,h2,h3{letter-spacing:-.01em;line-height:1.18;}
+p{color:var(--text-2);text-wrap:pretty;}
+strong{color:var(--text);font-weight:600;}
+em{color:var(--accent-text);font-style:normal;}
+code{font-family:var(--mono);font-size:12px;color:var(--accent-text);background:var(--bg-2);padding:1px 6px;border-radius:4px;border:1px solid var(--line-2);}
+
+/* hero */
+.hero{padding:88px 0 36px;border-bottom:1px solid var(--line);}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:36px;}
+.brand .mark{width:28px;height:28px;border-radius:7px;background:linear-gradient(140deg,var(--accent),var(--accent-2));position:relative;flex:none;}
+.brand .mark::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--bg-0);box-shadow:0 0 0 1.5px oklch(1 0 0/.45) inset;}
+.brand b{font-size:15px;font-weight:600;letter-spacing:.04em;}
+.brand span{color:var(--text-3);font-size:11px;letter-spacing:.1em;text-transform:uppercase;}
+.hero h1{font-size:clamp(30px,5vw,52px);font-weight:600;margin-bottom:18px;}
+.hero h1 .g{background:linear-gradient(120deg,var(--accent-text),var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.hero > p{font-size:clamp(15px,2vw,18px);max-width:680px;}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px;}
+.pill{font-size:11.5px;font-family:var(--mono);color:var(--text-2);background:var(--bg-1);border:1px solid var(--line);padding:6px 11px;border-radius:999px;}
+.toc{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 24px;margin-top:28px;}
+@media(max-width:600px){.toc{grid-template-columns:1fr;}}
+.toc a{display:flex;align-items:baseline;gap:10px;padding:10px 0;border-bottom:1px dotted var(--line);color:var(--text-2);font-size:13.5px;text-decoration:none;border-bottom-style:dotted;}
+.toc a:hover{color:var(--text);}
+.toc .tn{font-family:var(--mono);font-size:11px;color:var(--accent-text);}
+
+/* sections */
+section.block{padding:60px 0 6px;border-bottom:1px solid var(--line-2);}
+.sec-h{display:flex;align-items:baseline;gap:13px;margin-bottom:6px;}
+.sec-h h2{font-size:clamp(22px,3vw,30px);font-weight:600;}
+.sec-n{font-family:var(--mono);font-size:12px;color:var(--accent-text);}
+.sec-p{font-size:15.5px;color:var(--text-2);max-width:720px;margin:12px 0 26px;}
+
+/* cards */
+.card{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;}
+.grid{display:grid;gap:14px;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:720px){.g2,.g3{grid-template-columns:1fr;}}
+
+/* callout */
+.callout{border-radius:var(--radius);padding:18px 20px;border:1px solid;display:flex;gap:13px;align-items:flex-start;}
+.callout .ic{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;margin-top:1px;}
+.callout .ic svg{width:13px;height:13px;}
+.callout h4{font-size:13.5px;font-weight:600;margin-bottom:3px;}
+.callout p{font-size:13px;margin:0;}
+.callout.key{background:var(--accent-soft);border-color:var(--accent-line);}
+.callout.key .ic{background:var(--accent);color:var(--bg-0);}
+.callout.ok{background:var(--ok-soft);border-color:oklch(.78 .13 150/.35);}
+.callout.ok .ic{background:var(--ok);color:var(--bg-0);}
+.callout.warn{background:var(--warn-soft);border-color:oklch(.80 .13 75/.35);}
+.callout.warn .ic{background:var(--warn);color:var(--bg-0);}
+
+/* pre */
+pre{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.85;color:var(--text-2);}
+pre .cm{color:var(--text-3);}
+pre .kw{color:var(--accent-text);}
+pre .fn{color:oklch(.80 .11 290);}
+pre .str{color:var(--ok);}
+pre .hl{background:oklch(.74 .13 232/.12);display:block;margin:0 -18px;padding:0 18px;}
+
+/* ── Architecture Diagram ── */
+.arch-diag{border:1px solid var(--accent-line);border-radius:12px;overflow:hidden;background:var(--bg-1);}
+.arch-shell{display:flex;align-items:center;gap:12px;padding:10px 18px;background:oklch(0.74 0.13 232/.10);border-bottom:1px solid var(--accent-line);}
+.shell-label{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);}
+.shell-plats{font-size:11px;color:var(--text-3);font-family:var(--mono);margin-left:auto;}
+.arch-inner{padding:16px;display:flex;flex-direction:column;}
+.arch-ui-box{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:11px 15px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.arch-ui-lbl{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);flex:none;}
+.arch-ui-variants{display:flex;flex-wrap:wrap;gap:5px;}
+.arch-ui-v{font-size:11.5px;color:var(--text-2);background:var(--bg-3);border:1px solid var(--line);border-radius:5px;padding:3px 9px;}
+.arch-conn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 0;}
+.arch-conn .vl{width:1px;height:7px;background:var(--line);}
+.arch-conn .cl{font-size:10px;color:var(--text-3);font-family:var(--mono);}
+.arch-bus{display:flex;align-items:center;gap:12px;background:oklch(0.74 0.13 232/.08);border:1px solid var(--accent-line);border-radius:8px;padding:10px 15px;}
+.bus-pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;animation:bpulse 2.4s ease-in-out infinite;}
+@keyframes bpulse{0%,100%{box-shadow:0 0 0 0 oklch(0.74 0.13 232/.55);}60%{box-shadow:0 0 0 6px oklch(0.74 0.13 232/0);}}
+.bus-title{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-text);flex:none;}
+.bus-line{flex:1;height:1px;background:var(--accent-line);}
+.bus-code{font-family:var(--mono);font-size:10.5px;color:var(--text-3);}
+.arch-mods{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding-top:14px;}
+@media(max-width:700px){.arch-mods{grid-template-columns:repeat(4,1fr);}}
+@media(max-width:460px){.arch-mods{grid-template-columns:repeat(2,1fr);}}
+.am{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:10px 7px;text-align:center;position:relative;}
+.am::before{content:"";position:absolute;top:-14px;left:50%;transform:translateX(-50%);width:1px;height:13px;background:var(--line);}
+.am-dot{display:block;width:5px;height:5px;border-radius:50%;margin:0 auto 5px;}
+.am.stable .am-dot{background:var(--ok);}
+.am.evolve .am-dot{background:var(--warn);}
+.am-name{display:block;font-size:11px;font-weight:600;color:var(--text);margin-bottom:2px;}
+.am-file{display:block;font-family:var(--mono);font-size:9px;color:var(--text-3);}
+.arch-store-wrap{margin-top:10px;}
+.store-lbl{text-align:center;font-size:10px;color:var(--text-3);font-family:var(--mono);padding:4px 0 6px;}
+.arch-provs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:4px;}
+@media(max-width:580px){.arch-provs{grid-template-columns:1fr;}}
+.ap{display:flex;align-items:center;gap:9px;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:8px 11px;}
+.ap-dot{width:6px;height:6px;border-radius:50%;flex:none;}
+.ap.now .ap-dot{background:var(--ok);}
+.ap.p3 .ap-dot{background:var(--warn);}
+.ap.p4 .ap-dot{background:var(--text-3);}
+.ap-name{font-size:12px;font-weight:600;}
+.ap-back{font-family:var(--mono);font-size:10px;color:var(--text-3);}
+.ap-phase{margin-left:auto;font-size:10px;color:var(--text-3);}
+
+/* ── Module Cards ── */
+.mod-card{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.mod-head{display:flex;align-items:center;gap:9px;padding:12px 16px;background:var(--bg-2);border-bottom:1px solid var(--line);}
+.mod-num{font-family:var(--mono);font-size:10px;color:var(--text-3);flex:none;}
+.mod-head h3{font-size:13.5px;font-weight:600;flex:1;}
+.mod-badge{font-size:9px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap;}
+.mod-badge.stable{background:var(--ok-soft);color:var(--ok);}
+.mod-badge.evolve{background:var(--warn-soft);color:var(--warn);}
+.mod-files{font-family:var(--mono);font-size:9px;color:var(--text-3);display:none;}
+@media(min-width:900px){.mod-files{display:block;}}
+.mod-body{padding:13px 15px;}
+.mod-desc{font-size:12.5px;color:var(--text-2);margin-bottom:11px;line-height:1.55;}
+.mod-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--text-3);margin-bottom:5px;}
+.mod-iface{border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:11px;}
+.mm{display:flex;gap:11px;padding:6px 11px;border-bottom:1px solid var(--line-2);align-items:baseline;}
+.mm:last-child{border-bottom:none;}
+.mm-n{font-family:var(--mono);font-size:10.5px;color:var(--accent-text);white-space:nowrap;flex:none;}
+.mm-d{font-size:11px;color:var(--text-3);}
+.mod-hooks{display:flex;flex-wrap:wrap;gap:4px;}
+.hook{font-size:9.5px;font-family:var(--mono);padding:2px 7px;border-radius:5px;border:1px solid;}
+.hook.p2{color:var(--accent-text);border-color:var(--accent-line);background:var(--accent-soft);}
+.hook.p3{color:var(--warn);border-color:oklch(.80 .13 75/.3);background:var(--warn-soft);}
+.hook.p4{color:var(--text-3);border-color:var(--line);background:var(--bg-2);}
+
+/* ── Event Bus channel table ── */
+.ch-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.ch-table th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;padding:0 13px 10px;border-bottom:1px solid var(--line);}
+.ch-table td{padding:8px 13px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--text-2);}
+.ch-table tr:last-child td{border-bottom:none;}
+.ch-table td:first-child{font-family:var(--mono);font-size:11px;color:var(--accent-text);white-space:nowrap;}
+.ch-table td:last-child{font-size:11px;color:var(--text-3);font-family:var(--mono);}
+
+/* ── Layers ── */
+.layers{display:flex;flex-direction:column;}
+.lyr{border:1px solid var(--line);overflow:hidden;}
+.lyr+.lyr{border-top:none;}
+.lyr:first-child{border-radius:var(--radius) var(--radius) 0 0;}
+.lyr:last-child{border-radius:0 0 var(--radius) var(--radius);}
+.lyr-h{background:var(--bg-2);padding:11px 18px;display:flex;align-items:center;gap:11px;border-bottom:1px solid var(--line);}
+.lyr-dot{width:9px;height:9px;border-radius:3px;flex:none;}
+.lyr-h h4{font-size:13.5px;font-weight:600;}
+.lyr-when{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--text-3);}
+.lyr-b{padding:11px 18px;font-size:13px;color:var(--text-2);}
+.lyr-arrow{display:grid;place-items:center;padding:4px;color:var(--text-3);}
+.lyr-arrow svg{width:14px;height:14px;}
+
+/* ── Upgrade matrix ── */
+.matrix{width:100%;border-collapse:collapse;font-size:12.5px;}
+.matrix th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;padding:0 12px 10px;border-bottom:1px solid var(--line);}
+.matrix td{padding:10px 12px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--text-2);}
+.matrix tr:last-child td{border-bottom:none;}
+.matrix td:first-child{color:var(--text);font-weight:600;font-size:13px;}
+.mtag{display:inline-block;font-family:var(--mono);font-size:9px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:1px 5px;border-radius:4px;margin:1px 1px 0;}
+.eff-lo{color:var(--ok);font-weight:600;}
+.eff-md{color:var(--warn);font-weight:600;}
+.eff-hi{color:var(--bad);font-weight:600;}
+
+footer{padding:56px 0 0;color:var(--text-3);font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HERO -->
+<header class="hero">
+  <div class="brand"><div class="mark"></div><b>Lumen</b><span>Desktop · v2.0</span></div>
+  <div class="kicker">Modular Architecture Spec · June 2026</div>
+  <h1>Eight modules.<br><span class="g">One engine. Every platform.</span></h1>
+  <p>Lumen evolves from PWA prototype to a native, offline-first macOS application — architected so any module can be upgraded, swapped, or extended without touching the others. The imaging engine code: zero changes.</p>
+  <div class="pills">
+    <span class="pill">Tauri v2 · macOS native</span>
+    <span class="pill">8 isolated modules</span>
+    <span class="pill">LumenBus pub/sub</span>
+    <span class="pill">IStorageProvider interface</span>
+    <span class="pill">IPlugin extensibility</span>
+    <span class="pill">iOS/iPadOS via Capacitor</span>
+  </div>
+  <nav class="toc">
+    <a href="#rules"><span class="tn">01</span> Four architectural rules</a>
+    <a href="#diagram"><span class="tn">02</span> Module map</a>
+    <a href="#shell"><span class="tn">03</span> Tauri platform shell</a>
+    <a href="#modules"><span class="tn">04</span> The eight modules</a>
+    <a href="#bus"><span class="tn">05</span> Event bus</a>
+    <a href="#storage"><span class="tn">06</span> Storage evolution</a>
+    <a href="#plugins"><span class="tn">07</span> Plugin system</a>
+    <a href="#ios"><span class="tn">08</span> iOS / iPadOS path</a>
+    <a href="#matrix"><span class="tn">09</span> Upgrade matrix</a>
+  </nav>
+</header>
+
+<!-- 01 RULES -->
+<section class="block" id="rules">
+  <div class="sec-h"><span class="sec-n">01</span><h2>Four architectural rules</h2></div>
+  <p class="sec-p">Every decision in Lumen 2 follows from these four rules. When an upgrade feels complicated, it is usually because one of these is being violated.</p>
+  <div class="grid g2">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Rule 1</div>
+      <h3 style="font-size:16px;margin-bottom:8px">The engine is sacred</h3>
+      <p style="font-size:13px"><code>imaging.js</code>, <code>analysis.js</code>, <code>scene.js</code>, <code>presets.js</code> — pure functions that accept data and return data. They know nothing about the DOM, storage, or any platform API. This constraint never changes.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Rule 2</div>
+      <h3 style="font-size:16px;margin-bottom:8px">Modules don't import each other</h3>
+      <p style="font-size:13px">No module <code>import</code>s or <code>require</code>s another module's internals. All cross-module communication flows through <em>LumenBus</em>. This is what makes each module independently replaceable.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Rule 3</div>
+      <h3 style="font-size:16px;margin-bottom:8px">Everything goes through a provider</h3>
+      <p style="font-size:13px">No UI or engine code touches IndexedDB, SQLite, iCloud, or any storage API directly. All persistence flows through <code>IStorageProvider</code>. Switching backends is one constructor call in <code>app.js</code>.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Rule 4</div>
+      <h3 style="font-size:16px;margin-bottom:8px">Platforms are a shell concern</h3>
+      <p style="font-size:13px">macOS menus, Touch Bar, iOS gestures — all wired at the platform shell level only. The 8 modules are identical JavaScript on macOS, iOS, and the web. The shell adapts them; the modules never know which platform they're on.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 02 MODULE MAP -->
+<section class="block" id="diagram">
+  <div class="sec-h"><span class="sec-n">02</span><h2>Module map</h2></div>
+  <p class="sec-p">All data flows through the event bus. No module holds a reference to another. The UI module is the only subscriber that writes to the DOM; all others are pure computation or storage.</p>
+
+  <div class="arch-diag">
+    <div class="arch-shell">
+      <span class="shell-label">Tauri v2 Platform Shell</span>
+      <span class="shell-plats">macOS · iOS/iPadOS (Capacitor) · Web (PWA)</span>
+    </div>
+    <div class="arch-inner">
+      <div class="arch-ui-box">
+        <span class="arch-ui-lbl">UI Module</span>
+        <div class="arch-ui-variants">
+          <span class="arch-ui-v">macOS: sidebar + stage + inspector</span>
+          <span class="arch-ui-v">iOS/iPadOS: tab nav + adaptive panels</span>
+          <span class="arch-ui-v">Web: responsive PWA</span>
+        </div>
+      </div>
+      <div class="arch-conn">
+        <div class="vl"></div>
+        <span class="cl">events · results</span>
+        <div class="vl"></div>
+      </div>
+      <div class="arch-bus">
+        <div class="bus-pulse"></div>
+        <span class="bus-title">Lumen Event Bus</span>
+        <div class="bus-line"></div>
+        <span class="bus-code">LumenBus.emit(channel, payload) · .on(channel, fn)</span>
+      </div>
+      <div class="arch-mods">
+        <div class="am stable"><span class="am-dot"></span><span class="am-name">Library</span><span class="am-file">store.js</span></div>
+        <div class="am stable"><span class="am-dot"></span><span class="am-name">Imaging</span><span class="am-file">imaging.js</span></div>
+        <div class="am evolve"><span class="am-dot"></span><span class="am-name">AI Engine</span><span class="am-file">analysis.js</span></div>
+        <div class="am stable"><span class="am-dot"></span><span class="am-name">Presets</span><span class="am-file">presets.js</span></div>
+        <div class="am stable"><span class="am-dot"></span><span class="am-name">Crop</span><span class="am-file">crop.js</span></div>
+        <div class="am evolve"><span class="am-dot"></span><span class="am-name">Export</span><span class="am-file">export.js</span></div>
+        <div class="am evolve"><span class="am-dot"></span><span class="am-name">Storage</span><span class="am-file">core/</span></div>
+      </div>
+      <div class="arch-store-wrap">
+        <div class="store-lbl">↑ read / write</div>
+        <div class="arch-provs">
+          <div class="ap now"><div class="ap-dot"></div><div><div class="ap-name">LocalProvider</div><div class="ap-back">IndexedDB · SQLite</div></div><span class="ap-phase">now</span></div>
+          <div class="ap p3"><div class="ap-dot"></div><div><div class="ap-name">iCloudProvider</div><div class="ap-back">CloudKit · Core Data</div></div><span class="ap-phase">phase 3</span></div>
+          <div class="ap p4"><div class="ap-dot"></div><div><div class="ap-name">SupabaseProvider</div><div class="ap-back">Postgres + Storage</div></div><span class="ap-phase">phase 4</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:13px;align-items:center;">
+    <span style="font-size:12px;color:var(--text-3)">Stability:</span>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;flex:none;"></span>Stable — interface locked, internals may improve</span>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--warn);display:inline-block;flex:none;"></span>Evolving — interface may grow; old signatures preserved</span>
+  </div>
+</section>
+
+<!-- 03 PLATFORM SHELL -->
+<section class="block" id="shell">
+  <div class="sec-h"><span class="sec-n">03</span><h2>Tauri platform shell</h2></div>
+  <p class="sec-p">Tauri v2 wraps Lumen's existing web layer in a native macOS binary. The entire JS engine is untouched. Tauri adds the OS-level capabilities a professional photo app requires that the browser alone cannot provide.</p>
+
+  <div class="grid g3" style="margin-bottom:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">File system</div>
+      <h3 style="font-size:14px;margin-bottom:7px">Real disk access</h3>
+      <p style="font-size:13px">Read any folder, watch directories for new imports, write exports anywhere. No file pickers needed for watch-folder or batch workflows.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">App size</div>
+      <h3 style="font-size:14px;margin-bottom:7px">~12 MB binary</h3>
+      <p style="font-size:13px">Ships with system WebKit — no bundled Chromium. The final <code>.app</code> is 10–20× smaller than an equivalent Electron build.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Distribution</div>
+      <h3 style="font-size:14px;margin-bottom:7px">App Store + direct</h3>
+      <p style="font-size:13px">Produces a signed <code>.app</code> and <code>.dmg</code>. Submit to the Mac App Store or distribute directly with notarization.</p>
+    </div>
+  </div>
+
+  <div class="callout key" style="margin-bottom:16px">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg></div>
+    <div><h4>Zero engine rewrites</h4><p>Tauri calls <code>imaging.js</code>, <code>analysis.js</code>, and every other engine module through exactly the same function signatures they already expose. A Rust backend handles OS calls; the JS layer is completely unchanged.</p></div>
+  </div>
+
+  <pre><span class="cm">// js/platform/tauri.js — the ONLY new platform-specific file</span>
+<span class="cm">// Nothing below touches the imaging engine.</span>
+
+<span class="kw">import</span> { open } from <span class="str">'@tauri-apps/plugin-dialog'</span>;
+<span class="kw">import</span> { watchImmediate } from <span class="str">'@tauri-apps/plugin-fs'</span>;
+<span class="kw">import</span> { SQLiteProvider } from <span class="str">'./sqlite-provider'</span>;
+
+<span class="cm">// SQLiteProvider replaces IndexedDB — same IStorageProvider interface</span>
+<span class="hl">window.Store = <span class="kw">new</span> <span class="fn">LumenStore</span>(<span class="kw">new</span> <span class="fn">SQLiteProvider</span>());</span>
+<span class="kw">await</span> window.Store.<span class="fn">init</span>();
+
+<span class="cm">// Watch folder — emits via LumenBus; Library module handles the rest</span>
+<span class="kw">async function</span> <span class="fn">watchFolder</span>(path) {
+  <span class="kw">return</span> <span class="fn">watchImmediate</span>(path, (e) => {
+    <span class="kw">if</span> (e.type === <span class="str">'create'</span>) LumenBus.<span class="fn">emit</span>(<span class="str">'folder:new-file'</span>, e.path);
+  });
+}
+
+<span class="cm">// Native menu wired here — calls LumenBus, no module importing required</span>
+<span class="kw">await</span> <span class="fn">Menu</span>.new({ items: [
+  { id: <span class="str">'import'</span>, text: <span class="str">'Import Photos…'</span>, action: () => LumenBus.<span class="fn">emit</span>(<span class="str">'ui:import'</span>) },
+  { id: <span class="str">'export'</span>, text: <span class="str">'Export…'</span>,        action: () => LumenBus.<span class="fn">emit</span>(<span class="str">'ui:export'</span>) },
+]}).<span class="fn">setAsAppMenu</span>();</pre>
+</section>
+
+<!-- 04 EIGHT MODULES -->
+<section class="block" id="modules">
+  <div class="sec-h"><span class="sec-n">04</span><h2>The eight modules</h2></div>
+  <p class="sec-p">Each module exposes a frozen interface object. Stability badges indicate how freely the interface can grow. Blue upgrade hooks are targetted for v2; amber for Phase 3; grey for long-term.</p>
+
+  <div class="grid g2">
+
+    <!-- M1 Library Manager -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M1</span>
+        <h3>Library Manager</h3>
+        <span class="mod-badge evolve">Evolving</span>
+        <span class="mod-files">store.js · app.js · dashboard.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Manages photo ingestion, library state, albums, and thumbnail pipeline. The only module that calls <code>IStorageProvider</code> for photo records and emits <code>photo:imported</code>.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">importFiles(files)</span><span class="mm-d">Ingest File[] → thumbnails → store → emit photo:imported</span></div>
+          <div class="mm"><span class="mm-n">listPhotos(filter?)</span><span class="mm-d">Query photos with optional filter predicate</span></div>
+          <div class="mm"><span class="mm-n">createAlbum(name, kind)</span><span class="mm-d">Create named album, returns Album record</span></div>
+          <div class="mm"><span class="mm-n">generateThumbnail(id)</span><span class="mm-d">240px JPEG thumbnail → store in blobs</span></div>
+          <div class="mm"><span class="mm-n">watchFolder(path)</span><span class="mm-d">Tauri only — watch directory, auto-import new files</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">Watch Folder</span>
+          <span class="hook p2">Smart Albums</span>
+          <span class="hook p3">RAW + XMP Sidecar</span>
+          <span class="hook p4">Photos.app Bridge</span>
+          <span class="hook p4">Video Import</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M2 Imaging Engine -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M2</span>
+        <h3>Imaging Engine</h3>
+        <span class="mod-badge stable">Stable ✓</span>
+        <span class="mod-files">imaging.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Pure-function pixel processing pipeline — the sacred module. Accepts <code>ImageData</code> buffers, returns data. No DOM, no storage, no side effects. The interface is locked indefinitely.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">analyze(imageData)</span><span class="mm-d">Full single-pass pixel analysis → PixelStats</span></div>
+          <div class="mm"><span class="mm-n">process(src, params, out)</span><span class="mm-d">Apply all 15 adjustments to pixel buffer in-place</span></div>
+          <div class="mm"><span class="mm-n">quickHist(imageData)</span><span class="mm-d">Lightweight histogram pass for live slider updates</span></div>
+          <div class="mm"><span class="mm-n">straighten(img, angle, w, h)</span><span class="mm-d">Cover-scale rotation → new canvas</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">Web Worker thread</span>
+          <span class="hook p2">WASM SIMD</span>
+          <span class="hook p3">RAW Decoder (libraw)</span>
+          <span class="hook p3">Per-channel Curves</span>
+          <span class="hook p4">GPU Pipeline</span>
+          <span class="hook p4">Masking / Local Adj.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M3 AI Engine -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M3</span>
+        <h3>AI Engine</h3>
+        <span class="mod-badge evolve">Evolving</span>
+        <span class="mod-files">analysis.js · scene.js · suggestions.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Interprets pixel statistics into scene classification, correction parameters, detected issues, and creative suggestions. The underlying <em>model</em> can be swapped without changing the interface signature.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">classify(stats)</span><span class="mm-d">10 scene types with confidence score</span></div>
+          <div class="mm"><span class="mm-n">autoParams(stats, strength, scene)</span><span class="mm-d">All 15 correction values from pixel statistics</span></div>
+          <div class="mm"><span class="mm-n">detectIssues(stats)</span><span class="mm-d">Labelled issues with severity 0 / 1 / 2</span></div>
+          <div class="mm"><span class="mm-n">suggest(stats, scene)</span><span class="mm-d">Ranked, user-approvable suggestion list</span></div>
+          <div class="mm"><span class="mm-n">generateNote(stats)</span><span class="mm-d">async — Claude API or local model, returns string</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">Improved heuristics</span>
+          <span class="hook p3">ONNX scene model</span>
+          <span class="hook p3">Local LLM notes</span>
+          <span class="hook p4">Face / subject detection</span>
+          <span class="hook p4">Style transfer</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M4 Preset Engine -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M4</span>
+        <h3>Preset Engine</h3>
+        <span class="mod-badge stable">Stable ✓</span>
+        <span class="mod-files">presets.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Manages built-in and user presets. Builds final parameter sets by merging a creative delta over an AI-corrected base. Supports installable preset packs via the plugin system.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">list(category?)</span><span class="mm-d">Return presets, optionally filtered by category</span></div>
+          <div class="mm"><span class="mm-n">build(id, stats, intensity, scene)</span><span class="mm-d">Merge creative delta → full Params object</span></div>
+          <div class="mm"><span class="mm-n">recommend(sceneType)</span><span class="mm-d">Top 4 preset IDs for the detected scene</span></div>
+          <div class="mm"><span class="mm-n">installPack(manifest)</span><span class="mm-d">Register preset pack from plugin manifest</span></div>
+          <div class="mm"><span class="mm-n">saveCustom(name, params)</span><span class="mm-d">Persist user-created preset to Storage</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">New preset packs</span>
+          <span class="hook p3">LUT support (.cube)</span>
+          <span class="hook p3">Lightroom preset import</span>
+          <span class="hook p4">Community pack gallery</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M5 Crop Engine -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M5</span>
+        <h3>Crop Engine</h3>
+        <span class="mod-badge stable">Stable ✓</span>
+        <span class="mod-files">crop.js (logic layer)</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">All crop, straighten, and composition-assist computation. The crop <em>overlay UI</em> lives in M7; this module contains only the geometry and pixel operations, keeping them testable and portable.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">suggestCrop(stats, aspect)</span><span class="mm-d">Rule-of-thirds placement with horizon detection</span></div>
+          <div class="mm"><span class="mm-n">applyCrop(canvas, rect)</span><span class="mm-d">Render cropped region → new canvas at target size</span></div>
+          <div class="mm"><span class="mm-n">straighten(img, angle)</span><span class="mm-d">Cover-scale rotation, never reveals empty corners</span></div>
+          <div class="mm"><span class="mm-n">rationalize(rect, aspect)</span><span class="mm-d">Lock crop frame to target aspect ratio</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p3">Perspective correct</span>
+          <span class="hook p3">Lens distortion</span>
+          <span class="hook p4">AI composition guide</span>
+          <span class="hook p4">Content-aware fill</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M6 Export Engine -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M6</span>
+        <h3>Export Engine</h3>
+        <span class="mod-badge evolve">Evolving</span>
+        <span class="mod-files">export.js · exif.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Renders the final output at any resolution and format. Manages pluggable export destinations — local disk, share sheet, cloud services — via a registered destination interface.</p>
+        <div class="mod-lbl">Interface</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">render(photo, edits, opts)</span><span class="mm-d">Full lossless pipeline → Blob with EXIF injected</span></div>
+          <div class="mm"><span class="mm-n">renderBatch(photos, opts)</span><span class="mm-d">Async generator — yields one Blob per photo</span></div>
+          <div class="mm"><span class="mm-n">registerDestination(dest)</span><span class="mm-d">Add plugin-provided IExportDestination</span></div>
+          <div class="mm"><span class="mm-n">destinations()</span><span class="mm-d">List all registered destinations</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">Share Sheet (iOS)</span>
+          <span class="hook p3">Cloud destinations</span>
+          <span class="hook p3">Print driver</span>
+          <span class="hook p4">RAW export</span>
+          <span class="hook p4">Video export</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M7 UI Module -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M7</span>
+        <h3>UI Module</h3>
+        <span class="mod-badge evolve">Evolving</span>
+        <span class="mod-files">app.js · panels.js · dashboard.js · styles.css</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Platform-adaptive view layer. The only module that writes to the DOM. Reads state from <code>LumenStore</code>, subscribes to bus events, and never holds a reference to any engine module.</p>
+        <div class="mod-lbl">Platform variants</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">macOS</span><span class="mm-d">3-column: filmstrip · stage · inspector — native menus via Tauri</span></div>
+          <div class="mm"><span class="mm-n">iOS / iPadOS</span><span class="mm-d">Tab nav + bottom-sheet panels + pinch-zoom canvas</span></div>
+          <div class="mm"><span class="mm-n">Web (PWA)</span><span class="mm-d">Current responsive layout — the reference implementation</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">Full keyboard shortcuts</span>
+          <span class="hook p2">Pro inspector tabs</span>
+          <span class="hook p3">Split view / multi-window</span>
+          <span class="hook p3">Touch Bar</span>
+          <span class="hook p4">macOS Widgets</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- M8 Storage Layer -->
+    <div class="mod-card">
+      <div class="mod-head">
+        <span class="mod-num">M8</span>
+        <h3>Storage Layer</h3>
+        <span class="mod-badge stable">Stable ✓ (interface)</span>
+        <span class="mod-files">js/core/*.js</span>
+      </div>
+      <div class="mod-body">
+        <p class="mod-desc">Abstracts all persistence behind <code>IStorageProvider</code>. The store initialisation is a single constructor call — switching from local to cloud requires zero other code changes.</p>
+        <div class="mod-lbl">Provider progression</div>
+        <div class="mod-iface">
+          <div class="mm"><span class="mm-n">LocalProvider</span><span class="mm-d">IndexedDB (web) · SQLite via Tauri plugin (desktop)</span></div>
+          <div class="mm"><span class="mm-n">iCloudProvider</span><span class="mm-d">CloudKit + NSUbiquitousKeyValueStore — Phase 3</span></div>
+          <div class="mm"><span class="mm-n">SupabaseProvider</span><span class="mm-d">Postgres + Supabase Storage — Phase 4</span></div>
+        </div>
+        <div class="mod-lbl">Upgrade hooks</div>
+        <div class="mod-hooks">
+          <span class="hook p2">SQLite (Tauri)</span>
+          <span class="hook p3">iCloud sync</span>
+          <span class="hook p4">Supabase multi-device</span>
+          <span class="hook p4">Conflict resolution</span>
+          <span class="hook p4">Migration tool</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 05 EVENT BUS -->
+<section class="block" id="bus">
+  <div class="sec-h"><span class="sec-n">05</span><h2>Event bus</h2></div>
+  <p class="sec-p"><code>LumenBus</code> is a lightweight pub/sub object shared across all modules. Emitting on a channel requires no knowledge of who is listening — this is the structural guarantee that keeps modules independent.</p>
+
+  <table class="ch-table" style="margin-bottom:16px">
+    <thead><tr><th>Channel</th><th>Published by</th><th>Subscribers</th><th>Payload type</th></tr></thead>
+    <tbody>
+      <tr><td>photo:imported</td><td>Library</td><td>UI, AI Engine</td><td>Photo</td></tr>
+      <tr><td>photo:selected</td><td>UI</td><td>UI, AI Engine, Presets</td><td>photoId</td></tr>
+      <tr><td>edit:committed</td><td>UI</td><td>Storage, Histogram</td><td>EditRecord</td></tr>
+      <tr><td>edit:reset</td><td>UI</td><td>UI</td><td>photoId</td></tr>
+      <tr><td>analysis:ready</td><td>AI Engine</td><td>UI</td><td>{ stats, scene, suggestions }</td></tr>
+      <tr><td>export:started / :done</td><td>Export</td><td>UI</td><td>{ photoId, options? / blob }</td></tr>
+      <tr><td>plugin:installed</td><td>Plugin Manager</td><td>Presets, Export</td><td>PluginManifest</td></tr>
+      <tr><td>storage:synced</td><td>Storage</td><td>UI</td><td>{ count, lastSync }</td></tr>
+      <tr><td>album:created</td><td>Library</td><td>UI, Storage</td><td>Album</td></tr>
+    </tbody>
+  </table>
+
+  <pre><span class="cm">// js/core/bus.js — the entire implementation</span>
+<span class="kw">const</span> LumenBus = (() => {
+  <span class="kw">const</span> listeners = <span class="kw">new</span> Map();
+  <span class="kw">return</span> {
+    <span class="fn">on</span>(channel, fn) {
+      <span class="kw">if</span> (!listeners.<span class="fn">has</span>(channel)) listeners.<span class="fn">set</span>(channel, <span class="kw">new</span> Set());
+      listeners.<span class="fn">get</span>(channel).<span class="fn">add</span>(fn);
+      <span class="kw">return</span> () => listeners.<span class="fn">get</span>(channel).<span class="fn">delete</span>(fn); <span class="cm">// returns unsubscribe fn</span>
+    },
+    <span class="fn">emit</span>(channel, payload) {
+      listeners.<span class="fn">get</span>(channel)?.<span class="fn">forEach</span>(fn => <span class="fn">fn</span>(payload));
+    },
+  };
+})();
+window.LumenBus = LumenBus;</pre>
+</section>
+
+<!-- 06 STORAGE EVOLUTION -->
+<section class="block" id="storage">
+  <div class="sec-h"><span class="sec-n">06</span><h2>Storage evolution</h2></div>
+  <p class="sec-p">Each phase adds a new provider. No existing code changes when a new provider is introduced — only the constructor call in <code>app.js</code> (or <code>tauri.js</code>) is updated.</p>
+
+  <div class="layers">
+    <div class="lyr">
+      <div class="lyr-h"><span class="lyr-dot" style="background:var(--ok)"></span><h4>Phase 1–2 · LocalProvider</h4><span class="lyr-when">now</span></div>
+      <div class="lyr-b">Web: IndexedDB via existing <code>LumenDB</code> helpers. Desktop (Tauri): <code>SQLiteProvider</code> using <code>tauri-plugin-sql</code> — same <code>IStorageProvider</code> interface, ~5× faster reads, no 2 GB quota. Original image blobs are stored locally and <strong>never synced</strong> without an explicit user action.</div>
+    </div>
+    <div class="lyr-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div>
+    <div class="lyr">
+      <div class="lyr-h"><span class="lyr-dot" style="background:var(--warn)"></span><h4>Phase 3 · iCloudProvider</h4><span class="lyr-when">after iOS launch</span></div>
+      <div class="lyr-b">Implements <code>IStorageProvider</code> using CloudKit JS + <code>NSUbiquitousKeyValueStore</code> for settings. Photo <em>metadata</em> and <em>edits</em> sync across Mac and iPhone/iPad. Original RAW/JPEG files sync via iCloud Drive only when the user explicitly requests it ("Download Original"). Conflict resolution: last-write-wins on edits, with a per-photo updatedAt timestamp.</div>
+    </div>
+    <div class="lyr-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div>
+    <div class="lyr">
+      <div class="lyr-h"><span class="lyr-dot" style="background:var(--text-3)"></span><h4>Phase 4 · SupabaseProvider</h4><span class="lyr-when">multi-platform, cross-account</span></div>
+      <div class="lyr-b">Implements <code>IStorageProvider</code> using the Supabase JS client. Enables sharing albums across accounts, team collaboration, and Android/Windows support (which have no iCloud). The sync cursor + outbox pattern tracks pending changes for background flush. Original blobs remain on-device; only thumbnails and edit records travel to the cloud.</div>
+    </div>
+  </div>
+
+  <div class="callout ok" style="margin-top:14px">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div><h4>Privacy guarantee holds across all phases</h4><p>Original image pixels never leave the device without an explicit export action — this is structural, not a policy. <code>storeOriginal()</code> and <code>loadOriginal()</code> always point to local storage regardless of which provider is active.</p></div>
+  </div>
+</section>
+
+<!-- 07 PLUGIN SYSTEM -->
+<section class="block" id="plugins">
+  <div class="sec-h"><span class="sec-n">07</span><h2>Plugin system</h2></div>
+  <p class="sec-p">Plugins are manifest-driven bundles. Three plugin types map to the three most natural extension points: preset packs, AI model replacements, and export destinations. Each type implements a declared interface.</p>
+
+  <div class="grid g3" style="margin-bottom:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Type: presets</div>
+      <h3 style="font-size:14px;margin-bottom:7px">Preset Packs</h3>
+      <p style="font-size:13px">A <code>presets.json</code> array of preset objects. Installed via <code>PresetEngine.installPack(manifest)</code>. Displayed in the existing preset grid under a pack label. Uninstallable without restart.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Type: ai-engine</div>
+      <h3 style="font-size:14px;margin-bottom:7px">AI Model</h3>
+      <p style="font-size:13px">An ONNX or CoreML model bundle with a thin JS wrapper that implements the <code>IAIEngine</code> interface. Replaces <code>classify()</code> and/or <code>autoParams()</code>. The rest of the app calls it identically.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Type: export-dest</div>
+      <h3 style="font-size:14px;margin-bottom:7px">Export Destination</h3>
+      <p style="font-size:13px">Implements <code>IExportDestination: { id, label, icon, send(blob, meta) }</code>. Registered via <code>ExportEngine.registerDestination()</code>. Appears in the export modal destination list immediately.</p>
+    </div>
+  </div>
+
+  <pre><span class="cm">// Plugin manifest — lumen-plugin.json</span>
+{
+  <span class="str">"id"</span>:          <span class="str">"lumen-moody-film"</span>,
+  <span class="str">"name"</span>:        <span class="str">"Moody Film Collection"</span>,
+  <span class="str">"version"</span>:     <span class="str">"1.2.0"</span>,
+  <span class="str">"type"</span>:        <span class="str">"presets"</span>,            <span class="cm">// "presets" | "ai-engine" | "export-dest"</span>
+  <span class="str">"entry"</span>:       <span class="str">"presets.json"</span>,       <span class="cm">// main entry file</span>
+  <span class="str">"author"</span>:      <span class="str">"Studio Noir"</span>,
+  <span class="str">"requires"</span>:    <span class="str">">=2.0.0"</span>,
+  <span class="str">"description"</span>:<span class="str">"12 cinematic film presets with analog grain simulation"</span>
+}
+
+<span class="cm">// Install flow (same for all plugin types)</span>
+<span class="kw">const</span> manifest = <span class="kw">await</span> <span class="fn">loadJSON</span>(<span class="str">'lumen-plugin.json'</span>);
+LumenBus.<span class="fn">emit</span>(<span class="str">'plugin:installed'</span>, manifest);
+<span class="cm">// → PresetEngine, ExportEngine, and AIEngine each listen</span>
+<span class="cm">// → Only the module matching manifest.type acts on it</span></pre>
+</section>
+
+<!-- 08 iOS / iPadOS -->
+<section class="block" id="ios">
+  <div class="sec-h"><span class="sec-n">08</span><h2>iOS / iPadOS path</h2></div>
+  <p class="sec-p">The recommended approach is <strong>Capacitor</strong> — it wraps the existing web app in a WKWebView and provides native plugins as a thin bridge. The entire imaging engine runs identically on iOS.</p>
+
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">What Capacitor provides</div>
+      <ul style="font-size:13px;color:var(--text-2);list-style:none;display:flex;flex-direction:column;gap:6px;">
+        <li>📁 <strong>File system</strong> — Camera Roll, Files app, iCloud Drive</li>
+        <li>📤 <strong>Share sheet</strong> — native iOS share extension</li>
+        <li>🖼️ <strong>Photo picker</strong> — PHPickerViewController</li>
+        <li>💾 <strong>Secure storage</strong> — Keychain for credentials</li>
+        <li>🔔 <strong>Haptic feedback</strong> — on crop handle snap, on export complete</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">UI Module — iOS variant</div>
+      <ul style="font-size:13px;color:var(--text-2);list-style:none;display:flex;flex-direction:column;gap:6px;">
+        <li>Tab bar: Library · Edit · Adjust</li>
+        <li>Stage: pinch-zoom + swipe before/after</li>
+        <li>Sliders: 44px touch targets, thumb-reachable layout</li>
+        <li>Crop handles: enlarged hit areas, haptic snap to thirds</li>
+        <li>Export: native share sheet via Capacitor plugin</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+    <div><h4>100% of the JS engine runs unchanged on iOS</h4><p><code>Imaging.process()</code>, <code>Analysis.autoParams()</code>, every preset, every suggestion — identical. Capacitor's WKWebView supports <code>ImageData</code>, <code>OffscreenCanvas</code>, and <code>IndexedDB</code>. The only new code is the Capacitor plugin bridge wired in <code>js/platform/capacitor.js</code> — the same pattern as <code>js/platform/tauri.js</code>.</p></div>
+  </div>
+</section>
+
+<!-- 09 UPGRADE MATRIX -->
+<section class="block" id="matrix">
+  <div class="sec-h"><span class="sec-n">09</span><h2>Upgrade matrix</h2></div>
+  <p class="sec-p">Every future capability you've described, mapped to the module(s) it touches — and the guarantee that nothing outside those modules changes.</p>
+
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th style="width:22%">Future feature</th>
+        <th style="width:28%">Module(s) changed</th>
+        <th style="width:32%">What stays untouched</th>
+        <th style="width:18%">Effort</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Better AI editing models</td>
+        <td><span class="mtag">M3 AI Engine</span></td>
+        <td>All 7 other modules. Interface unchanged — swap the implementation behind <code>classify()</code> and <code>autoParams()</code>.</td>
+        <td><span class="eff-lo">Low</span></td>
+      </tr>
+      <tr>
+        <td>New AI features</td>
+        <td><span class="mtag">M3 AI Engine</span> <span class="mtag">M7 UI</span></td>
+        <td>Engine, Presets, Storage, Export. New methods added to <code>IAIEngine</code>; new panels added to M7.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>New preset packs</td>
+        <td><span class="mtag">M4 Presets</span></td>
+        <td>Everything. Installed via <code>installPack(manifest)</code> — no code change at all. Ship as a plugin.</td>
+        <td><span class="eff-lo">Low</span></td>
+      </tr>
+      <tr>
+        <td>Cloud sync</td>
+        <td><span class="mtag">M8 Storage</span></td>
+        <td>All 7 other modules. Write <code>SupabaseProvider</code>, swap the constructor. One line in <code>app.js</code>.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>Multi-device sync</td>
+        <td><span class="mtag">M8 Storage</span> <span class="mtag">M7 UI</span></td>
+        <td>Engine, Presets, Library logic, Export. Storage gets sync cursor + outbox; UI gets a sync status indicator.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>iPhone / iPad version</td>
+        <td><span class="mtag">M7 UI</span></td>
+        <td>All engine modules M1–M6 and M8 — completely identical. Only the view layer is adapted.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>More pro editing controls</td>
+        <td><span class="mtag">M2 Imaging</span> <span class="mtag">M7 UI</span></td>
+        <td>Storage, AI, Presets, Export, Library. New slider params added to <code>Imaging.DEFAULTS</code>; new panel UI in M7.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>Video editing support</td>
+        <td><span class="mtag">M1 Library</span> <span class="mtag">M6 Export</span> <span class="mtag">M7 UI</span> + new M9</td>
+        <td>M2 Imaging, M3 AI, M4 Presets, M5 Crop, M8 Storage. New <code>VideoModule</code> follows the same bus pattern.</td>
+        <td><span class="eff-hi">High</span></td>
+      </tr>
+      <tr>
+        <td>RAW photo support</td>
+        <td><span class="mtag">M2 Imaging</span> <span class="mtag">M1 Library</span></td>
+        <td>AI Engine, Presets, Crop, Export, Storage, UI. Inject WASM libraw decoder before <code>Imaging.analyze()</code>. No other module knows.</td>
+        <td><span class="eff-hi">High</span></td>
+      </tr>
+      <tr>
+        <td>Plugins / extensions</td>
+        <td><span class="mtag">M4 Presets</span> <span class="mtag">M6 Export</span> <span class="mtag">M3 AI</span> <span class="mtag">M7 UI</span></td>
+        <td>M2 Imaging, M5 Crop, M8 Storage. Plugin manifest format defined; plugin manager UI added to M7. No engine changes.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+      <tr>
+        <td>Local adjustments / masking</td>
+        <td><span class="mtag">M2 Imaging</span> <span class="mtag">M7 UI</span></td>
+        <td>Storage, Library, AI, Presets, Export. <code>Imaging.process()</code> gains an optional mask weight map parameter; M7 adds brush/gradient UI.</td>
+        <td><span class="eff-hi">High</span></td>
+      </tr>
+      <tr>
+        <td>iCloud sync</td>
+        <td><span class="mtag">M8 Storage</span></td>
+        <td>All 7 other modules. Write <code>iCloudProvider</code>. One constructor line after user signs in. Originals stay on-device.</td>
+        <td><span class="eff-md">Medium</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok" style="margin-top:16px">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div><h4>The imaging engine is never in the "changed" column</h4><p>Every upgrade in this matrix either adds an optional parameter to <code>imaging.js</code> or touches a completely different module. The core pixel pipeline — 15 years of photographic tuning — is never at risk.</p></div>
+  </div>
+</section>
+
+<footer>Lumen 2 · Modular Desktop Architecture · v2.0 · June 2026 · Supersedes Architecture Phase 0</footer>
+</div>
+</body>
+</html>
