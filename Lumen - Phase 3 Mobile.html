@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Lumen — Phase 3 iOS/iPadOS</title>
+<style>
+:root{
+  --accent:      oklch(0.74 0.13 232);
+  --accent-2:    oklch(0.74 0.13 300);
+  --accent-soft: oklch(0.74 0.13 232 / 0.13);
+  --accent-line: oklch(0.74 0.13 232 / 0.38);
+  --accent-text: oklch(0.82 0.11 232);
+  --bg-0: oklch(0.165 0.004 270);
+  --bg-1: oklch(0.205 0.004 270);
+  --bg-2: oklch(0.245 0.005 270);
+  --bg-3: oklch(0.29  0.006 270);
+  --line:   oklch(1 0 0 / 0.08);
+  --line-2: oklch(1 0 0 / 0.05);
+  --text:   oklch(0.94 0.003 270);
+  --text-2: oklch(0.74 0.004 270);
+  --text-3: oklch(0.56 0.004 270);
+  --ok:      oklch(0.78 0.13 150); --ok-soft:   oklch(0.78 0.13 150 / 0.13);
+  --warn:    oklch(0.80 0.13 75);  --warn-soft: oklch(0.80 0.13 75  / 0.13);
+  --bad:     oklch(0.70 0.15 25);  --bad-soft:  oklch(0.70 0.15 25  / 0.13);
+  --travel:  oklch(0.76 0.13 160); --travel-soft: oklch(0.76 0.13 160 / 0.11);
+  --radius: 10px;
+  --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+  --sans: "Helvetica Neue",Helvetica,system-ui,-apple-system,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:var(--sans);
+  background:
+    radial-gradient(1000px 600px at 82% -5%, oklch(0.74 0.13 232 / 0.10),transparent 60%),
+    radial-gradient(800px 500px at 4% 0%, oklch(0.74 0.13 300 / 0.07),transparent 55%),
+    var(--bg-0);
+  background-attachment:fixed;
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  line-height:1.6;
+  letter-spacing:0.01em;
+}
+.wrap{max-width:960px;margin:0 auto;padding:0 28px 120px;}
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);font-weight:600;}
+h1,h2,h3{letter-spacing:-.01em;line-height:1.18;}
+p{color:var(--text-2);text-wrap:pretty;}
+strong{color:var(--text);font-weight:600;}
+em{color:var(--accent-text);font-style:normal;}
+code{font-family:var(--mono);font-size:12px;color:var(--accent-text);background:var(--bg-2);padding:1px 6px;border-radius:4px;border:1px solid var(--line-2);}
+a{color:var(--accent-text);text-decoration:none;}
+
+/* hero */
+.hero{padding:88px 0 36px;border-bottom:1px solid var(--line);}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:36px;}
+.brand .mark{width:28px;height:28px;border-radius:7px;background:linear-gradient(140deg,var(--accent),var(--accent-2));position:relative;flex:none;}
+.brand .mark::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--bg-0);box-shadow:0 0 0 1.5px oklch(1 0 0/.45) inset;}
+.brand b{font-size:15px;font-weight:600;letter-spacing:.04em;}
+.brand span{color:var(--text-3);font-size:11px;letter-spacing:.1em;text-transform:uppercase;}
+.hero h1{font-size:clamp(30px,5vw,52px);font-weight:600;margin-bottom:18px;}
+.hero h1 .g{background:linear-gradient(120deg,var(--accent-text),var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.hero > p{font-size:clamp(15px,2vw,18px);max-width:680px;}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px;}
+.pill{font-size:11.5px;font-family:var(--mono);color:var(--text-2);background:var(--bg-1);border:1px solid var(--line);padding:6px 11px;border-radius:999px;}
+.toc{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 24px;margin-top:28px;}
+@media(max-width:600px){.toc{grid-template-columns:1fr;}}
+.toc a{display:flex;align-items:baseline;gap:10px;padding:10px 0;border-bottom:1px dotted var(--line);color:var(--text-2);font-size:13.5px;}
+.toc .tn{font-family:var(--mono);font-size:11px;color:var(--accent-text);}
+
+/* sections */
+section.block{padding:60px 0 6px;border-bottom:1px solid var(--line-2);}
+.sec-h{display:flex;align-items:baseline;gap:13px;margin-bottom:6px;}
+.sec-h h2{font-size:clamp(22px,3vw,30px);font-weight:600;}
+.sec-n{font-family:var(--mono);font-size:12px;color:var(--accent-text);}
+.sec-p{font-size:15.5px;color:var(--text-2);max-width:720px;margin:12px 0 26px;}
+
+/* cards */
+.card{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;}
+.grid{display:grid;gap:14px;}
+.g2{grid-template-columns:1fr 1fr;}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+@media(max-width:720px){.g2,.g3,.g4{grid-template-columns:1fr 1fr;}}
+@media(max-width:480px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+
+/* callout */
+.callout{border-radius:var(--radius);padding:18px 20px;border:1px solid;display:flex;gap:13px;align-items:flex-start;}
+.callout .ic{width:22px;height:22px;flex:none;border-radius:6px;display:grid;place-items:center;margin-top:1px;}
+.callout .ic svg{width:13px;height:13px;}
+.callout h4{font-size:13.5px;font-weight:600;margin-bottom:3px;}
+.callout p{font-size:13px;margin:0;}
+.callout.key{background:var(--accent-soft);border-color:var(--accent-line);}
+.callout.key .ic{background:var(--accent);color:var(--bg-0);}
+.callout.ok{background:var(--ok-soft);border-color:oklch(.78 .13 150/.35);}
+.callout.ok .ic{background:var(--ok);color:var(--bg-0);}
+.callout.warn{background:var(--warn-soft);border-color:oklch(.80 .13 75/.35);}
+.callout.warn .ic{background:var(--warn);color:var(--bg-0);}
+.callout.travel{background:var(--travel-soft);border-color:oklch(.76 .13 160/.35);}
+.callout.travel .ic{background:var(--travel);color:var(--bg-0);}
+
+/* pre */
+pre{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.85;color:var(--text-2);}
+pre .cm{color:var(--text-3);}
+pre .kw{color:var(--accent-text);}
+pre .fn{color:oklch(.80 .11 290);}
+pre .str{color:var(--ok);}
+pre .hl{background:oklch(.74 .13 232/.12);display:block;margin:0 -18px;padding:0 18px;}
+
+/* ── Pipeline diagram ── */
+.pipeline{display:flex;flex-direction:column;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.pipe-row{display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid var(--line-2);}
+.pipe-row:last-child{border-bottom:none;}
+.pipe-label{background:var(--bg-2);padding:12px 16px;font-size:12px;font-weight:600;border-right:1px solid var(--line-2);display:flex;flex-direction:column;justify-content:center;gap:3px;}
+.pipe-label .pl-sub{font-size:10px;color:var(--text-3);font-family:var(--mono);font-weight:400;}
+.pipe-body{padding:12px 16px;font-size:13px;color:var(--text-2);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.pipe-tag{font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:5px;border:1px solid;white-space:nowrap;}
+.pipe-tag.fast{color:var(--ok);border-color:oklch(.78 .13 150/.3);background:var(--ok-soft);}
+.pipe-tag.worker{color:var(--accent-text);border-color:var(--accent-line);background:var(--accent-soft);}
+.pipe-tag.never{color:var(--bad);border-color:oklch(.70 .15 25/.3);background:var(--bad-soft);}
+@media(max-width:600px){.pipe-row{grid-template-columns:1fr;} .pipe-label{border-right:none;border-bottom:1px solid var(--line-2);}}
+
+/* ── Workflow flow ── */
+.flow{display:flex;flex-direction:column;gap:0;}
+.flow-step{display:grid;grid-template-columns:32px 1fr;gap:14px;padding:13px 0;border-bottom:1px solid var(--line-2);align-items:start;}
+.flow-step:last-child{border-bottom:none;}
+.flow-n{width:28px;height:28px;border-radius:8px;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;font-family:var(--mono);font-size:11px;color:var(--accent-text);font-weight:600;margin-top:1px;}
+.flow-step h4{font-size:13.5px;font-weight:600;margin-bottom:3px;}
+.flow-step p{font-size:13px;margin:0;}
+.flow-arrow{display:grid;place-items:center;padding:2px 0;grid-column:1;}
+.flow-arrow svg{width:12px;height:12px;color:var(--text-3);}
+
+/* ── Gesture spec ── */
+.gesture-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+@media(max-width:600px){.gesture-grid{grid-template-columns:1fr;}}
+.gesture{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:start;}
+.gesture-icon{width:44px;height:44px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line);display:grid;place-items:center;font-size:20px;}
+.gesture h4{font-size:13px;font-weight:600;margin-bottom:3px;}
+.gesture p{font-size:12px;color:var(--text-3);margin:0;}
+
+/* ── Device layouts ── */
+.devices{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:600px){.devices{grid-template-columns:1fr;}}
+.device-card{background:var(--bg-1);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+.device-head{background:var(--bg-2);padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;}
+.device-head h3{font-size:14px;font-weight:600;}
+.device-badge{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:2px 7px;border-radius:5px;margin-left:auto;}
+.device-badge.phone{background:var(--accent-soft);color:var(--accent-text);}
+.device-badge.tablet{background:var(--ok-soft);color:var(--ok);}
+.device-layout{margin:14px 16px;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+.dl-mock{height:160px;background:var(--bg-2);position:relative;display:flex;align-items:stretch;}
+.dl-sidebar{width:68px;background:oklch(0.21 0.004 270);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:12px;gap:8px;}
+.dl-sidebar span{width:40px;height:5px;background:var(--bg-3);border-radius:3px;}
+.dl-stage{flex:1;background:oklch(0.16 0.004 270);display:grid;place-items:center;}
+.dl-stage span{font-size:10px;color:var(--text-3);font-family:var(--mono);}
+.dl-rail{width:100px;background:oklch(0.21 0.004 270);border-left:1px solid var(--line);}
+.dl-bottom{position:absolute;bottom:0;left:0;right:0;height:40px;background:oklch(0.19 0.004 270);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;}
+.dl-bottom span{font-size:9px;color:var(--text-3);font-family:var(--mono);}
+.device-body{padding:12px 16px;}
+.device-body li{font-size:13px;color:var(--text-2);padding:4px 0;border-bottom:1px solid var(--line-2);display:flex;align-items:baseline;gap:8px;}
+.device-body li:last-child{border-bottom:none;}
+.device-body li::before{content:"✓";color:var(--ok);font-size:11px;flex:none;}
+
+/* ── Travel Mode ── */
+.travel-card{background:var(--travel-soft);border:1px solid oklch(.76 .13 160/.3);border-radius:var(--radius);overflow:hidden;}
+.travel-head{padding:16px 20px;border-bottom:1px solid oklch(.76 .13 160/.2);display:flex;align-items:center;gap:12px;}
+.travel-head h3{font-size:17px;font-weight:600;color:var(--text);}
+.travel-head .travel-badge{font-size:10px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:5px;background:oklch(.76 .13 160/.2);color:var(--travel);border:1px solid oklch(.76 .13 160/.3);}
+.travel-body{display:grid;grid-template-columns:repeat(3,1fr);gap:0;}
+@media(max-width:700px){.travel-body{grid-template-columns:1fr;}}
+.travel-feature{padding:16px 20px;border-right:1px solid oklch(.76 .13 160/.15);}
+.travel-feature:last-child{border-right:none;}
+.travel-feature h4{font-size:13px;font-weight:600;margin-bottom:6px;color:var(--travel);}
+.travel-feature p{font-size:12.5px;color:var(--text-2);margin:0;}
+.travel-footer{padding:14px 20px;border-top:1px solid oklch(.76 .13 160/.2);font-size:13px;color:var(--text-2);}
+
+/* ── Performance checklist ── */
+.perf-table{width:100%;border-collapse:collapse;font-size:13px;}
+.perf-table th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;padding:0 14px 10px;border-bottom:1px solid var(--line);}
+.perf-table td{padding:11px 14px;border-bottom:1px solid var(--line-2);vertical-align:middle;color:var(--text-2);}
+.perf-table tr:last-child td{border-bottom:none;}
+.perf-table td:first-child{font-weight:600;color:var(--text);}
+.target{font-family:var(--mono);font-size:11.5px;font-weight:600;}
+.target.ok{color:var(--ok);}
+.target.warn{color:var(--warn);}
+.method-tag{font-size:10.5px;font-family:var(--mono);color:var(--text-3);}
+
+/* ── Module impact ── */
+.impact-table{width:100%;border-collapse:collapse;font-size:13px;}
+.impact-table th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);font-weight:600;padding:0 13px 10px;border-bottom:1px solid var(--line);}
+.impact-table td{padding:10px 13px;border-bottom:1px solid var(--line-2);vertical-align:top;color:var(--text-2);}
+.impact-table tr:last-child td{border-bottom:none;}
+.impact-table td:first-child{font-family:var(--mono);font-size:11.5px;color:var(--accent-text);white-space:nowrap;}
+.impact-badge{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 7px;border-radius:5px;display:inline-block;}
+.im-major{background:var(--warn-soft);color:var(--warn);}
+.im-minor{background:var(--ok-soft);color:var(--ok);}
+.im-none{background:var(--bg-3);color:var(--text-3);}
+
+footer{padding:56px 0 0;color:var(--text-3);font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HERO -->
+<header class="hero">
+  <div class="brand"><div class="mark"></div><b>Lumen</b><span>Phase 3 · Mobile</span></div>
+  <div class="kicker">iOS / iPadOS Spec · June 2026</div>
+  <h1>Mobile-first.<br><span class="g">Not desktop scaled down.</span></h1>
+  <p>Phase 3 is a first-class iPhone and iPad experience built on the same eight modules. The imaging engine is untouched. Everything new lives in M7 (UI), a new preview pipeline, and a Web Worker thread that keeps the UI at 60fps on 48MP photos.</p>
+  <div class="pills">
+    <span class="pill">Web Worker imaging</span>
+    <span class="pill">Preview pipeline</span>
+    <span class="pill">Touch-first controls</span>
+    <span class="pill">Travel Mode</span>
+    <span class="pill">Capacitor bridge</span>
+    <span class="pill">Rule 2 compliant</span>
+  </div>
+  <nav class="toc">
+    <a href="#philosophy"><span class="tn">01</span> Mobile-first philosophy</a>
+    <a href="#performance"><span class="tn">02</span> Performance architecture</a>
+    <a href="#workflow"><span class="tn">03</span> Mobile editing workflow</a>
+    <a href="#touch"><span class="tn">04</span> Touch interface</a>
+    <a href="#iphone"><span class="tn">05</span> iPhone</a>
+    <a href="#ipad"><span class="tn">06</span> iPad</a>
+    <a href="#travel"><span class="tn">07</span> Travel Mode</a>
+    <a href="#storage"><span class="tn">08</span> Mobile storage</a>
+    <a href="#checklist"><span class="tn">09</span> Performance checklist</a>
+    <a href="#impact"><span class="tn">10</span> Module impact</a>
+  </nav>
+</header>
+
+<!-- 01 PHILOSOPHY -->
+<section class="block" id="philosophy">
+  <div class="sec-h"><span class="sec-n">01</span><h2>Mobile-first philosophy</h2></div>
+  <p class="sec-p">Phase 3 is not a responsive rearrangement of the desktop UI. It is a reimagined editing experience designed around a thumb, a 6-inch screen, and a user who is standing in a train station in Tokyo.</p>
+
+  <div class="grid g3" style="margin-bottom:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Constraint 1</div>
+      <h3 style="font-size:15px;margin-bottom:7px">Thumb-first layout</h3>
+      <p style="font-size:13px">Every interactive element is in the bottom two-thirds of the screen. No controls require a stretch to the top corner. Minimum touch target: 44×44pt everywhere.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Constraint 2</div>
+      <h3 style="font-size:15px;margin-bottom:7px">One hand, always</h3>
+      <p style="font-size:13px">The full import → auto-enhance → export workflow can be completed one-handed. Sliders, presets, and the export button are all reachable without a second hand or repositioning the phone.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Constraint 3</div>
+      <h3 style="font-size:15px;margin-bottom:7px">Never block the view</h3>
+      <p style="font-size:13px">Controls slide away when the user is reviewing the photo. The image fills the screen. Panels appear only when needed — as bottom sheets, not permanent sidebars.</p>
+    </div>
+  </div>
+
+  <div class="callout key">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg></div>
+    <div>
+      <h4>Rule 2 compliance — no module imports another</h4>
+      <p>The entire Phase 3 UI is wired through <code>LumenBus</code>. Touch gestures emit events (<code>gesture:pinch</code>, <code>edit:params-changed</code>). The Web Worker result fires <code>imaging:preview-ready</code>. M7 listens and updates the canvas. No new direct module references are introduced anywhere.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 02 PERFORMANCE ARCHITECTURE -->
+<section class="block" id="performance">
+  <div class="sec-h"><span class="sec-n">02</span><h2>Performance architecture</h2></div>
+  <p class="sec-p">The single biggest performance unlock is the <strong>preview pipeline</strong>: process an 800px-wide proxy image during editing, and only run the full-resolution pipeline on export. A 48MP photo (8000×6000) has 48 million pixels. An 800px preview has 640,000 — 75× fewer. Sliders become instant.</p>
+
+  <div class="pipeline" style="margin-bottom:16px">
+    <div class="pipe-row">
+      <div class="pipe-label">Import<span class="pl-sub">once per photo</span></div>
+      <div class="pipe-body">Read original file → decode → generate <strong>800px preview ImageData</strong> → store both to M8. <span class="pipe-tag fast">main thread</span> Preview generation takes ~120ms on iPhone 14.</div>
+    </div>
+    <div class="pipe-row">
+      <div class="pipe-label">Slider / preset<span class="pl-sub">every interaction</span></div>
+      <div class="pipe-body">User moves slider → <code>LumenBus.emit('edit:params-changed', params)</code> → Web Worker receives preview ImageData + params → <code>Imaging.process()</code> on 640K pixels → posts result back → canvas updates. <span class="pipe-tag worker">Web Worker</span> <span class="pipe-tag fast">≈16ms target</span></div>
+    </div>
+    <div class="pipe-row">
+      <div class="pipe-label">Export<span class="pl-sub">on demand only</span></div>
+      <div class="pipe-body">User taps Export → Web Worker receives <em>full-resolution</em> ImageData + params → <code>Imaging.process()</code> → EXIF inject → share sheet. <span class="pipe-tag worker">Web Worker</span> Full 48MP render: ~4–6 seconds, UI fully responsive throughout.</div>
+    </div>
+    <div class="pipe-row">
+      <div class="pipe-label">Full-res decode<span class="pl-sub">what we avoid</span></div>
+      <div class="pipe-body">The original full-resolution ImageData is decoded <strong>once</strong> at export time, not held in memory during editing. <span class="pipe-tag never">never during editing</span> This caps working memory at ~30MB regardless of source file size.</div>
+    </div>
+  </div>
+
+  <pre><span class="cm">// js/workers/imaging-worker.js
+// The engine runs identically in a Worker — it has no DOM dependencies.</span>
+<span class="fn">importScripts</span>(<span class="str">'../imaging.js'</span>);
+
+self.<span class="fn">onmessage</span> = ({ data }) => {
+  <span class="kw">const</span> { id, src, params } = data;
+  <span class="kw">const</span> out = <span class="kw">new</span> <span class="fn">ImageData</span>(src.width, src.height);
+  Imaging.<span class="fn">process</span>(src, params, out);
+  <span class="cm">// Transfer the buffer — zero copy, no clone</span>
+  self.<span class="fn">postMessage</span>({ id, out }, [out.data.buffer]);
+};
+
+<span class="cm">// js/platform/mobile.js — wired by M7, uses LumenBus (Rule 2 ✓)</span>
+<span class="kw">const</span> worker = <span class="kw">new</span> <span class="fn">Worker</span>(<span class="str">'js/workers/imaging-worker.js'</span>);
+worker.<span class="fn">onmessage</span> = ({ data }) => LumenBus.<span class="fn">emit</span>(<span class="str">'imaging:preview-ready'</span>, data.out);
+
+LumenBus.<span class="fn">on</span>(<span class="str">'edit:params-changed'</span>, (params) => {
+  worker.<span class="fn">postMessage</span>({ id: <span class="str">'preview'</span>, src: previewImageData, params },
+<span class="hl">    [previewImageData.data.buffer]); <span class="cm">// transferable — main thread yields ownership</span></span>
+});</pre>
+
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Memory budget</div>
+      <h3 style="font-size:14px;margin-bottom:7px">≤ 150 MB at any time</h3>
+      <p style="font-size:13px">Preview ImageData: ~2 MB. Thumbnail: ~0.2 MB. Params + metadata: negligible. Full-res only allocated during export, then freed. iOS kills apps above ~200 MB.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">GPU acceleration</div>
+      <h3 style="font-size:14px;margin-bottom:7px">CSS filters for histogram display</h3>
+      <p style="font-size:13px">Histogram canvas uses <code>requestAnimationFrame</code> with <code>willChange: transform</code>. Preview canvas is composited on the GPU layer — no main-thread repaints during updates.</p>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">Large library</div>
+      <h3 style="font-size:14px;margin-bottom:7px">Virtualised grid</h3>
+      <p style="font-size:13px">The library grid renders only visible thumbnails. Off-screen tiles are removed from the DOM. 10,000 photos load in under 300ms. Thumbnails are always 240px — never original size.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 MOBILE WORKFLOW -->
+<section class="block" id="workflow">
+  <div class="sec-h"><span class="sec-n">03</span><h2>Mobile editing workflow</h2></div>
+  <p class="sec-p">Seven steps, designed so the user can go from camera roll to shared photo in under 30 seconds without touching a single manual slider.</p>
+
+  <div class="grid g2" style="align-items:start">
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-n">1</div>
+        <div>
+          <h4>Import photo</h4>
+          <p>Tap the + button → PHPickerViewController (Capacitor) or Files app sheet. Supports multi-select. Thumbnail and preview are generated in the background immediately after selection — import feels instant.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">2</div>
+        <div>
+          <h4>Quick analysis preview</h4>
+          <p><code>Imaging.analyze()</code> runs on the 800px preview in the Web Worker. Takes ~40ms on iPhone 14. Shows exposure, color, sharpness scores as animated score bars while the user is still looking at the photo.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">3</div>
+        <div>
+          <h4>Detect photo type</h4>
+          <p><code>Scene.classify()</code> runs in the same Worker pass. Result label appears as a subtle badge on the photo: "Landscape · 91% confident". Portrait mode routes to portrait-safe corrections automatically.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">4</div>
+        <div>
+          <h4>Suggest presets</h4>
+          <p>Top 4 recommended presets appear as thumbnail swatches below the photo. Scene-matched via <code>Presets.recommend()</code>. User can see the effect instantly — tap a preset, preview updates in the Worker within one frame.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">5</div>
+        <div>
+          <h4>Apply edits</h4>
+          <p>Tap <strong>Auto-Enhance</strong> or any preset swatch. The corrected preview appears immediately. A subtle "Before / After" swipe hint appears for 2 seconds then fades. No explicit confirmation needed.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">6</div>
+        <div>
+          <h4>Fine tune</h4>
+          <p>Swipe up to reveal the adjustment panel — exposure, vibrance, contrast as large scrollable sliders. Each drag fires <code>edit:params-changed</code>; preview updates in real time at 60fps. Tap the canvas to dismiss.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-n">7</div>
+        <div>
+          <h4>Export / share</h4>
+          <p>Tap the share button → native iOS share sheet via Capacitor. Full-resolution render runs in the Worker during the sheet's open animation (≈1.5s) — by the time the user picks an app, the file is ready.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="callout ok">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div><h4>30-second goal</h4><p>Import → Auto-Enhance → Export in under 30 seconds on a 12MP iPhone photo. Steps 1–5 complete without a single manual slider interaction — the AI does the work.</p></div>
+      </div>
+      <div class="callout key">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg></div>
+        <div><h4>Travel Mode shortcut</h4><p>In Travel Mode, the workflow collapses to 4 steps: Import → Auto-Enhance → Preview → Share. Steps 3, 4, and 6 are skipped. Optimised for speed over perfectionism when you have 3% battery left.</p></div>
+      </div>
+      <div class="card">
+        <div class="kicker" style="margin-bottom:8px">Offline behaviour</div>
+        <p style="font-size:13px">All 7 steps work with no internet. AI analysis uses local heuristics. Presets are bundled. Export goes to camera roll. If Travel Mode queues an upload, it stores the export and fires it when Wi-Fi returns — the user is never blocked.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 TOUCH INTERFACE -->
+<section class="block" id="touch">
+  <div class="sec-h"><span class="sec-n">04</span><h2>Touch interface</h2></div>
+  <p class="sec-p">Every control is designed for touch as the primary input, not mouse interaction with enlarged targets. Gesture bindings are additive — they work alongside tap interactions, never replace them.</p>
+
+  <div class="gesture-grid" style="margin-bottom:16px">
+    <div class="gesture">
+      <div class="gesture-icon">🤏</div>
+      <div><h4>Pinch zoom</h4><p>Two-finger pinch on canvas. Smooth scale from 1× to 4×. Two-finger pan when zoomed in. Double-tap resets to fit. Min touch target ignored for canvas — entire canvas area responds.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">👆</div>
+      <div><h4>Tap to compare</h4><p>Single tap on the canvas toggles Before / After. Hold shows original; release shows edit. No button needed. A subtle "Before" badge appears on the first tap to educate new users.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">↔️</div>
+      <div><h4>Swipe before / after</h4><p>Horizontal swipe on canvas when not zoomed reveals a split-view divider. Left = before, right = after. The divider snaps to the finger position. Swipe off-screen to dismiss.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">⬆️</div>
+      <div><h4>Swipe up — adjustments</h4><p>Swipe up from bottom of canvas reveals the adjustment panel as a bottom sheet. Swipe down to dismiss. Sheet has three tabs: Adjustments · Presets · Analysis.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">✂️</div>
+      <div><h4>Gesture crop</h4><p>In crop mode, drag corners and edges with enlarged 44pt hit areas. Two-finger rotate gesture maps to the straighten slider. Pinch inside the crop frame to rescale it.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">◀▶</div>
+      <div><h4>Swipe between photos</h4><p>Horizontal swipe on canvas (when at 1× zoom) navigates to the previous or next photo in the library. Smooth page-curl transition. Current edit is auto-saved on swipe away.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">📳</div>
+      <div><h4>Haptic feedback</h4><p>Light impact on: preset tap, crop handle snap to thirds, export complete, auto-enhance applied. Uses <code>navigator.vibrate()</code> on Android and the Capacitor Haptics plugin on iOS.</p></div>
+    </div>
+    <div class="gesture">
+      <div class="gesture-icon">🎚️</div>
+      <div><h4>Large sliders</h4><p>All adjustment sliders are 56px tall with a 32px thumb. Dragging anywhere on the slider track (not just the thumb) responds. Labels show numeric value during drag. Tap the label to type a value.</p></div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></div>
+    <div><h4>No tiny buttons anywhere in Phase 3</h4><p>Every tappable element must meet the 44×44pt minimum. Existing desktop UI elements (the score cards, the preset pills, the export config fields) are rebuilt as native-feeling mobile components — not CSS-scaled versions of the desktop elements.</p></div>
+  </div>
+</section>
+
+<!-- 05 iPHONE -->
+<section class="block" id="iphone">
+  <div class="sec-h"><span class="sec-n">05</span><h2>iPhone</h2></div>
+  <p class="sec-p">iPhone layout is portrait-primary and single-panel. All editing happens in one focused context at a time. Panels slide in as sheets rather than stacking in columns.</p>
+
+  <div class="devices">
+    <div class="device-card">
+      <div class="device-head">
+        <h3>iPhone layout</h3>
+        <span class="device-badge phone">portrait · landscape</span>
+      </div>
+      <div class="device-layout">
+        <div class="dl-mock" style="flex-direction:column;">
+          <div style="flex:1;background:oklch(0.16 0.004 270);display:grid;place-items:center;">
+            <span style="font-size:10px;color:var(--text-3);font-family:var(--mono);">photo canvas</span>
+          </div>
+          <div class="dl-bottom">
+            <span>Library</span>
+            <span>Edit</span>
+            <span>Adjust</span>
+          </div>
+        </div>
+      </div>
+      <div class="device-body">
+        <ul style="list-style:none">
+          <li>Full-bleed canvas, no chrome over the image</li>
+          <li>Bottom sheet for adjustments (swipe up)</li>
+          <li>Bottom tab bar: Library · Edit · Adjust</li>
+          <li>Safe area insets respected on notch/island devices</li>
+          <li>Landscape: canvas expands, tab bar collapses to icons</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="device-card">
+      <div class="device-head">
+        <h3>iOS integrations</h3>
+        <span class="device-badge phone">Capacitor</span>
+      </div>
+      <div class="device-layout">
+        <div class="dl-mock" style="flex-direction:column;justify-content:center;align-items:center;gap:10px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:10px;">
+            <span style="font-size:10px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:3px 9px;border-radius:5px;font-family:var(--mono);">Photos.app</span>
+            <span style="font-size:10px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:3px 9px;border-radius:5px;font-family:var(--mono);">Files.app</span>
+            <span style="font-size:10px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:3px 9px;border-radius:5px;font-family:var(--mono);">Share Sheet</span>
+            <span style="font-size:10px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:3px 9px;border-radius:5px;font-family:var(--mono);">iCloud Drive</span>
+            <span style="font-size:10px;color:var(--accent-text);background:var(--accent-soft);border:1px solid var(--accent-line);padding:3px 9px;border-radius:5px;font-family:var(--mono);">Dark Mode</span>
+          </div>
+        </div>
+      </div>
+      <div class="device-body">
+        <ul style="list-style:none">
+          <li>Import from Photos library (PHPickerViewController)</li>
+          <li>Import from Files app (document picker)</li>
+          <li>Save edited image back to camera roll</li>
+          <li>Native share sheet on export (all destinations)</li>
+          <li>Dark mode: already dark — respects prefers-color-scheme</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 iPad -->
+<section class="block" id="ipad">
+  <div class="sec-h"><span class="sec-n">06</span><h2>iPad</h2></div>
+  <p class="sec-p">iPad is a professional editing device. When in landscape, Lumen expands to a three-panel layout identical to the macOS version. Portrait mode collapses to the iPhone layout automatically.</p>
+
+  <div class="devices">
+    <div class="device-card">
+      <div class="device-head">
+        <h3>iPad landscape</h3>
+        <span class="device-badge tablet">three-panel</span>
+      </div>
+      <div class="device-layout">
+        <div class="dl-mock">
+          <div class="dl-sidebar">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="dl-stage"><span>stage</span></div>
+          <div class="dl-rail"></div>
+        </div>
+      </div>
+      <div class="device-body">
+        <ul style="list-style:none">
+          <li>Filmstrip sidebar (left) · canvas (center) · inspector (right)</li>
+          <li>Side-by-side before/after within the canvas panel</li>
+          <li>Full keyboard shortcut system (⌘Z undo, ⌘E export, etc.)</li>
+          <li>Trackpad: hover states, scroll wheel for sliders, right-click menus</li>
+          <li>Apple Pencil: draw crop frames and masks precisely</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="device-card">
+      <div class="device-head">
+        <h3>iPad keyboard shortcuts</h3>
+        <span class="device-badge tablet">pro workflow</span>
+      </div>
+      <div class="device-layout">
+        <div class="dl-mock" style="flex-direction:column;justify-content:center;align-items:stretch;padding:12px 16px;gap:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>⌘Z / ⌘⇧Z</span><span>Undo / Redo</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>← / →</span><span>Previous / Next photo</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>A</span><span>Auto-enhance</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>C</span><span>Crop mode</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>Space (hold)</span><span>View original</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);border-bottom:1px solid var(--line-2);padding-bottom:5px;"><span>⌘E</span><span>Export</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--text-3);"><span>1–5</span><span>Apply top 5 presets</span></div>
+        </div>
+      </div>
+      <div class="device-body">
+        <ul style="list-style:none">
+          <li>Full keyboard overlay (hold ⌘ to reveal all shortcuts)</li>
+          <li>Trackpad scroll on sliders — precise float adjustment</li>
+          <li>Right-click on photo: quick menu (Enhance · Crop · Export · Delete)</li>
+          <li>Apple Pencil pressure: brush opacity for future local adjustments</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 TRAVEL MODE -->
+<section class="block" id="travel">
+  <div class="sec-h"><span class="sec-n">07</span><h2>Travel Mode</h2></div>
+  <p class="sec-p">A one-tap mode for the moment you land at an airport with 12% battery and 40 photos to process. Travel Mode trades fine-grained control for speed and power efficiency.</p>
+
+  <div class="travel-card">
+    <div class="travel-head">
+      <svg style="width:22px;height:22px;color:var(--travel)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <h3>Travel Mode</h3>
+      <span class="travel-badge">Phase 3 feature</span>
+    </div>
+    <div class="travel-body">
+      <div class="travel-feature">
+        <h4>Low battery</h4>
+        <p>Preview resolution drops from 800px to 480px — 2.8× fewer pixels to process. Web Worker runs at reduced priority. Screen brightness locked to 60%. Estimated battery saving: ~35% vs normal editing session.</p>
+      </div>
+      <div class="travel-feature">
+        <h4>Speed over perfectionism</h4>
+        <p>Auto-Enhance fires immediately on import. Manual sliders are hidden — only a single Intensity control (Subtle → Dramatic) is visible. The editing workflow collapses from 7 steps to 4. Batch enhance available with one tap.</p>
+      </div>
+      <div class="travel-feature">
+        <h4>Export queue</h4>
+        <p>Exports are queued rather than run immediately. Full-resolution renders fire only when on Wi-Fi <strong>and</strong> charging. The queue shows in the Library as a pending badge. User can force-flush the queue manually at any time.</p>
+      </div>
+    </div>
+    <div class="travel-footer">
+      <strong>Activation:</strong> Settings → Travel Mode toggle, or auto-prompt when battery drops below 20%. State is persisted via <code>Store.saveSetting('travelMode', true)</code>. Deactivates automatically when plugged in and idle for 2 minutes.
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="callout ok">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div><h4>Offline presets — always available</h4><p>All 38 built-in presets are bundled in <code>presets.js</code> — no network required. Travel Mode does not change this. Offline editing has always been a core principle.</p></div>
+    </div>
+    <div class="callout key">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg></div>
+      <div><h4>Module boundary</h4><p>Travel Mode is a <strong>UI state</strong> stored in M8 (Storage). M7 reads it on boot and adjusts the interface. No engine module knows Travel Mode exists. Turning it off restores full UI immediately.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 MOBILE STORAGE -->
+<section class="block" id="storage">
+  <div class="sec-h"><span class="sec-n">08</span><h2>Mobile storage</h2></div>
+  <p class="sec-p">Mobile storage is deliberately conservative. The rule: store the smallest representation that enables the intended use case. Never store a second copy of original pixels.</p>
+
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">What we store</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-2);">
+          <span style="font-size:13px;font-weight:600">Original blob</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">photos.app ref or File</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-2);">
+          <span style="font-size:13px;font-weight:600">240px thumbnail</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ok)">~30 KB JPEG</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-2);">
+          <span style="font-size:13px;font-weight:600">800px preview</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ok)">~180 KB JPEG</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-2);">
+          <span style="font-size:13px;font-weight:600">Edit parameters</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ok)">~1 KB JSON</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0">
+          <span style="font-size:13px;font-weight:600">Preset selection</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ok)">id + intensity</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px">What we never duplicate</div>
+      <p style="font-size:13px;margin-bottom:12px">The original full-resolution image is only loaded from disk <strong>once</strong> — at export time. It is never stored a second time in IndexedDB or duplicated into working memory during editing.</p>
+      <div class="callout ok" style="padding:12px 14px">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <div><p>A library of 500 iPhone photos uses ~110 MB of storage (thumbnails + previews + params). The originals stay in the Photos app — Lumen holds a reference, not a copy.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 PERFORMANCE CHECKLIST -->
+<section class="block" id="checklist">
+  <div class="sec-h"><span class="sec-n">09</span><h2>Performance checklist</h2></div>
+  <p class="sec-p">Benchmark targets for shipping Phase 3. Measure on a mid-range device (iPhone 12 / A14 chip) — if it passes there, it passes everywhere. All tests run with a cold cache unless noted.</p>
+
+  <table class="perf-table">
+    <thead>
+      <tr><th>Test</th><th>Target</th><th>Fail threshold</th><th>How to measure</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Cold startup</td>
+        <td><span class="target ok">&lt; 2 s</span></td>
+        <td><span class="target warn">&gt; 3.5 s</span></td>
+        <td><span class="method-tag">Safari → Time to Interactive in Web Inspector</span></td>
+      </tr>
+      <tr>
+        <td>Import 12 MP photo</td>
+        <td><span class="target ok">&lt; 1 s</span></td>
+        <td><span class="target warn">&gt; 2 s</span></td>
+        <td><span class="method-tag">Tap import → thumbnail visible. Stopwatch.</span></td>
+      </tr>
+      <tr>
+        <td>Analysis + scene detect</td>
+        <td><span class="target ok">&lt; 100 ms</span></td>
+        <td><span class="target warn">&gt; 250 ms</span></td>
+        <td><span class="method-tag">console.time() around analyze() + classify()</span></td>
+      </tr>
+      <tr>
+        <td>Slider response (preview)</td>
+        <td><span class="target ok">≤ 16 ms</span></td>
+        <td><span class="target warn">&gt; 33 ms</span></td>
+        <td><span class="method-tag">requestAnimationFrame timing during drag</span></td>
+      </tr>
+      <tr>
+        <td>Preset tap → preview update</td>
+        <td><span class="target ok">&lt; 50 ms</span></td>
+        <td><span class="target warn">&gt; 100 ms</span></td>
+        <td><span class="method-tag">LumenBus timestamp on emit vs imaging:preview-ready</span></td>
+      </tr>
+      <tr>
+        <td>Export 12 MP (JPEG, full-res)</td>
+        <td><span class="target ok">&lt; 4 s</span></td>
+        <td><span class="target warn">&gt; 8 s</span></td>
+        <td><span class="method-tag">export:started → export:done bus events</span></td>
+      </tr>
+      <tr>
+        <td>Export 48 MP (JPEG, full-res)</td>
+        <td><span class="target ok">&lt; 12 s</span></td>
+        <td><span class="target warn">&gt; 20 s</span></td>
+        <td><span class="method-tag">Same as above, large source file</span></td>
+      </tr>
+      <tr>
+        <td>Working memory (single photo)</td>
+        <td><span class="target ok">&lt; 150 MB</span></td>
+        <td><span class="target warn">&gt; 200 MB</span></td>
+        <td><span class="method-tag">Safari → Memory profiler during slider drag</span></td>
+      </tr>
+      <tr>
+        <td>Library grid (500 photos)</td>
+        <td><span class="target ok">&lt; 300 ms</span></td>
+        <td><span class="target warn">&gt; 600 ms</span></td>
+        <td><span class="method-tag">Time from mount to all visible thumbnails rendered</span></td>
+      </tr>
+      <tr>
+        <td>Battery (30 min editing session)</td>
+        <td><span class="target ok">&lt; 8%</span></td>
+        <td><span class="target warn">&gt; 14%</span></td>
+        <td><span class="method-tag">iOS Settings → Battery → Screen On time</span></td>
+      </tr>
+      <tr>
+        <td>Battery — Travel Mode</td>
+        <td><span class="target ok">&lt; 5%</span></td>
+        <td><span class="target warn">&gt; 9%</span></td>
+        <td><span class="method-tag">Same test with Travel Mode enabled</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 10 MODULE IMPACT -->
+<section class="block" id="impact">
+  <div class="sec-h"><span class="sec-n">10</span><h2>Module impact</h2></div>
+  <p class="sec-p">Phase 3 touches five of the eight modules. Three modules — including the sacred imaging engine — are completely unchanged. Every cross-module call is via <code>LumenBus</code>.</p>
+
+  <table class="impact-table" style="margin-bottom:16px">
+    <thead>
+      <tr><th>Module</th><th>Impact</th><th>What changes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>M1 · Library</td>
+        <td><span class="impact-badge im-minor">Minor</span></td>
+        <td><strong>Add preview generation</strong> — at import time, generate and store an 800px preview JPEG alongside the thumbnail. <code>importFiles()</code> gains a <code>generatePreview()</code> step. Virtualised grid rendering for large libraries.</td>
+      </tr>
+      <tr>
+        <td>M2 · Imaging</td>
+        <td><span class="impact-badge im-none">None</span></td>
+        <td>Zero changes. <code>Imaging.process()</code> runs identically in the Web Worker. The engine doesn't know or care that it's in a worker thread — that's the payoff of Rule 1.</td>
+      </tr>
+      <tr>
+        <td>M3 · AI Engine</td>
+        <td><span class="impact-badge im-none">None</span></td>
+        <td>Zero changes. <code>Analysis.autoParams()</code>, <code>Scene.classify()</code>, and <code>Suggestions</code> all run in the same Worker thread as before. No interface changes required.</td>
+      </tr>
+      <tr>
+        <td>M4 · Presets</td>
+        <td><span class="impact-badge im-none">None</span></td>
+        <td>Zero changes. Preset swatch thumbnails are generated by passing preview ImageData through <code>Presets.build()</code> and <code>Imaging.process()</code> in the Worker — no new API needed.</td>
+      </tr>
+      <tr>
+        <td>M5 · Crop</td>
+        <td><span class="impact-badge im-minor">Minor</span></td>
+        <td><strong>Touch handle enlargement</strong> — crop handle hit areas expand to 44pt. Straighten slider maps to two-finger rotate gesture via M7. The <code>CropEngine</code> interface is unchanged; only the UI overlay in M7 is updated.</td>
+      </tr>
+      <tr>
+        <td>M6 · Export</td>
+        <td><span class="impact-badge im-minor">Minor</span></td>
+        <td><strong>Share sheet destination</strong> — register a new <code>IExportDestination</code> that calls the Capacitor Share plugin. Travel Mode queue added: <code>renderBatch()</code> now supports deferred execution via a <code>defer: true</code> option.</td>
+      </tr>
+      <tr>
+        <td>M7 · UI</td>
+        <td><span class="impact-badge im-major">Major</span></td>
+        <td><strong>Complete mobile UI rebuild</strong> — iPhone and iPad layouts, all gesture handlers, bottom sheets, Travel Mode toggle, large sliders, virtualised library grid, keyboard shortcuts for iPad. This is the primary Phase 3 workstream.</td>
+      </tr>
+      <tr>
+        <td>M8 · Storage</td>
+        <td><span class="impact-badge im-minor">Minor</span></td>
+        <td><strong>Preview cache store</strong> — add a <code>previews</code> object store to IndexedDB alongside <code>blobs</code>. <code>IStorageProvider</code> gains two methods: <code>storePreview(photoId, blob)</code> and <code>loadPreview(photoId)</code>. Interface is additive — backwards compatible.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <div><h4>macOS version is unaffected</h4><p>The Web Worker thread and preview pipeline are additive changes. The desktop app already works at full resolution — it simply gains the option of using preview-mode processing for live slider feedback, making the macOS experience faster too. Phase 3 is a net upgrade to all platforms.</p></div>
+  </div>
+</section>
+
+<footer>Lumen · Phase 3 iOS/iPadOS Spec · June 2026 · Follows modular architecture from Desktop Architecture v2.0</footer>
+</div>
+</body>
+</html>

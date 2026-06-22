@@ -84,6 +84,29 @@
       </div>
     </main>
 
+    <!-- Mobile adjust panel (phones only — Phase 3) -->
+    <div class="mob-adjust-panel" id="mobAdjustPanel">
+      <div class="mob-auto-row" id="mobAutoRow">
+        <button class="mob-auto-btn" id="mobAutoEnhance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3Z"/></svg>
+          Auto-Enhance
+        </button>
+      </div>
+      <div class="mob-ctrl-scroll" id="mobCtrlScroll"></div>
+      <div class="mob-slider-row" id="mobSliderRow" style="display:none">
+        <div class="mob-slider-head">
+          <button class="mob-cancel-btn" id="mobCancel">Cancel</button>
+          <span class="mob-slider-label" id="mobSliderLabel">Exposure</span>
+          <span class="mob-slider-val" id="mobSliderVal">0</span>
+          <button class="mob-apply-btn" id="mobApply">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            Apply
+          </button>
+        </div>
+        <input type="range" class="mob-range" id="mobSliderInput" min="-100" max="100" step="1" value="0">
+      </div>
+    </div>
+
     <!-- Right rail -->
     <aside class="rail" id="rail">
       <div id="railEmpty" class="empty-rail">
@@ -304,7 +327,7 @@
   </div>
 </nav>
 
-<input type="file" id="fileInput" accept="image/*" multiple hidden />
+<input type="file" id="fileInput" accept="image/*,.heic,.heif,.webp,.avif,.bmp,.tiff,.tif" multiple hidden />
 <div class="toast" id="toast"></div>
 
 <!-- Core data layer (Phase 0) -->
@@ -325,7 +348,10 @@
 <script src="js/export.js"></script>
 <script src="js/panels.js"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/mobile-adjust.js"></script>
+<script src="js/mobile-phase3.js"></script>
 
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>

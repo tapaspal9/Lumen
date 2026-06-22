@@ -130,15 +130,19 @@
   }
 
   const RAW_EXTS = new Set(['.cr2','.cr3','.nef','.arw','.dng','.raf','.orf','.rw2','.pef','.srw','.3fr','.rw1','.iiq']);
+  const HEIC_EXTS = new Set(['.heic','.heif']);
+  const getFileExt = f => (f.name.toLowerCase().match(/\.[^.]+$/) || [''])[0];
+
   function loadFiles(files) {
     const allFiles = [...files];
-    const rawFiles = allFiles.filter(f => RAW_EXTS.has((f.name.toLowerCase().match(/\.[^.]+$/) || [''])[0]));
-    const imgs = allFiles.filter(f => f.type.startsWith('image/'));
+    const rawFiles = allFiles.filter(f => RAW_EXTS.has(getFileExt(f)));
+    // Accept image/* types + HEIC/HEIF by extension (non-Safari may report wrong MIME)
+    const imgs = allFiles.filter(f => f.type.startsWith('image/') || HEIC_EXTS.has(getFileExt(f)));
     if (rawFiles.length && !imgs.length) {
       toast(`${rawFiles.length} RAW file${rawFiles.length > 1 ? 's' : ''} detected — convert to DNG or JPEG first for full editing`);
       return;
     }
-    if (rawFiles.length) toast(`${rawFiles.length} RAW file${rawFiles.length > 1 ? 's' : ''} skipped — JPEG / PNG / WebP / HEIC supported`);
+    if (rawFiles.length) toast(`${rawFiles.length} RAW file${rawFiles.length > 1 ? 's' : ''} skipped — JPEG / PNG / WebP / AVIF / BMP / TIFF / HEIC supported`);
     if (!imgs.length) return;
     const firstNew = library.length;
     let pending = imgs.length;
@@ -164,7 +168,38 @@
         }
         if (--pending === 0) finalize();
       };
-      img.onerror = () => { if (--pending === 0) finalize(); };
+      img.onerror = async () => {
+        // HEIC fallback: try converting via heic2any if browser can't decode natively
+        if (HEIC_EXTS.has(getFileExt(f)) && window.heic2any) {
+          try {
+            toast('Converting HEIC…');
+            const blob = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.94 });
+            const convBlob = Array.isArray(blob) ? blob[0] : blob;
+            const jUrl = URL.createObjectURL(convBlob);
+            const jImg = new Image();
+            jImg.onload = async () => {
+              const convFile = new File([convBlob], f.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+              if (window.Store) {
+                URL.revokeObjectURL(jUrl);
+                const entry = await Store.addPhoto(convFile, jImg, exif);
+                try {
+                  const a = imageDataFrom(jImg, ANALYZE_MAX);
+                  entry.stats = Imaging.analyze(a.data);
+                  if (window.Scene) entry.stats.scene = Scene.classify(entry.stats);
+                } catch (e2) { /* tainted */ }
+                library.push(entry); renderFilm();
+              } else {
+                addImage(jImg, f.name, jUrl, exif);
+              }
+              if (--pending === 0) finalize();
+            };
+            jImg.onerror = () => { toast('HEIC conversion failed'); if (--pending === 0) finalize(); };
+            jImg.src = jUrl;
+            return;
+          } catch (e2) { toast('HEIC not supported in this browser'); }
+        }
+        if (--pending === 0) finalize();
+      };
       img.src = url;
     });
     function finalize() {
@@ -1086,6 +1121,7 @@
     runAuto,
     toast, get strength() { return strength; },
     commitCrop, enterCrop, buildWorkingSource, processInto: (data, params, out) => Imaging.process(data, params, out),
+    scheduleRender, commitEdit, markEdited, pushHistory, syncSliders, clearPreset,
     batch: { preset: batchPreset, auto: batchAuto, crop: batchCrop, exportList: (list) => window.Export && Export.open(list) }
   };
 
