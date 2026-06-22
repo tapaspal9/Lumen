@@ -9,6 +9,23 @@
 
   const STRENGTH = { subtle: 0.45, natural: 0.72, professional: 1.0, dramatic: 1.45 };
 
+  // Per-scene correction targets — drives auto-enhance toward goals that are
+  // appropriate for the detected subject rather than a single universal average.
+  // meanL:       ideal mid-brightness (0–1).  contrastMult: scales contrast boost.
+  // satTarget:   ideal mean saturation — vibrance & saturation drive toward this.
+  const SCENE_TARGETS = {
+    'Portrait':             { meanL: 0.50, satTarget: 0.38, contrastMult: 0.65 },
+    'Landscape':            { meanL: 0.46, satTarget: 0.44, contrastMult: 1.10 },
+    'Nature':               { meanL: 0.46, satTarget: 0.46, contrastMult: 1.05 },
+    'Night':                { meanL: 0.30, satTarget: 0.34, contrastMult: 1.25 },
+    'Low Light':            { meanL: 0.40, satTarget: 0.36, contrastMult: 1.05 },
+    'Sunset / Golden Hour': { meanL: 0.48, satTarget: 0.46, contrastMult: 1.00 },
+    'Beach & Water':        { meanL: 0.52, satTarget: 0.44, contrastMult: 1.00 },
+    'City & Architecture':  { meanL: 0.45, satTarget: 0.32, contrastMult: 1.20 },
+    'Food':                 { meanL: 0.52, satTarget: 0.46, contrastMult: 0.90 },
+    'Indoor':               { meanL: 0.50, satTarget: 0.40, contrastMult: 0.90 },
+  };
+
   /* ---- Scores -------------------------------------------------------------*/
   function exposureScore(s) {
     const m = s.meanL / 255;
@@ -67,23 +84,27 @@
   }
 
   /* ---- Auto parameters ----------------------------------------------------*/
-  function autoParams(s, strengthKey) {
+  function autoParams(s, strengthKey, scene) {
     const k = STRENGTH[strengthKey] != null ? STRENGTH[strengthKey] : 1.0;
+    // Scene-specific targets override the universal averages when a scene is known.
+    const tgt = (scene && SCENE_TARGETS[scene.type])
+      || { meanL: 0.47, satTarget: 0.42, contrastMult: 1.0 };
     const m = s.meanL / 255;
     const wb = whiteBalance(s, k);
 
-    let exposure = clamp((0.47 - m) * 190, -55, 55) * k;
-    let contrast = clamp((46 - s.stdL) * 1.1, -8, 42) * k;
-    let blacks = clamp(-(s.blackPoint - 5) * 1.4, -42, 22) * k;
-    let whites = clamp((250 - s.whitePoint) * 0.95, -12, 40) * k;
-    let shadows = clamp(s.shadowClip * 280 + (m < 0.4 ? 14 : 0), 0, 55) * k;
-    let highlights = -clamp(s.highClip * 320 + (m > 0.6 ? 12 : 0), 0, 65) * k;
-    let vibrance = clamp((0.36 - s.sat) * 135, 0, 48) * k;
-    let saturation = clamp((0.3 - s.sat) * 40, -6, 16) * k;
-    let clarity = 9 * k;
-    let sharpness = 22 * k;
-    let noise = strengthKey === 'subtle' ? 0 : 4 * (k - 0.4);
-    let vignette = strengthKey === 'dramatic' ? -14 : strengthKey === 'professional' ? -5 : 0;
+    let exposure    = clamp((tgt.meanL - m) * 190, -55, 55) * k;
+    let contrast    = clamp((46 - s.stdL) * 1.1 * tgt.contrastMult, -8, 42) * k;
+    let blacks      = clamp(-(s.blackPoint - 5) * 1.4, -42, 22) * k;
+    let whites      = clamp((250 - s.whitePoint) * 0.95, -12, 40) * k;
+    let shadows     = clamp(s.shadowClip * 280 + (m < tgt.meanL - 0.07 ? 14 : 0), 0, 55) * k;
+    let highlights  = -clamp(s.highClip * 320 + (m > tgt.meanL + 0.13 ? 12 : 0), 0, 65) * k;
+    // vibrance/saturation drive toward scene's saturation ideal rather than a fixed average
+    let vibrance    = clamp((tgt.satTarget - 0.06 - s.sat) * 135, 0, 48) * k;
+    let saturation  = clamp((tgt.satTarget - 0.12 - s.sat) * 40, -6, 16) * k;
+    let clarity     = 9 * k;
+    let sharpness   = 22 * k;
+    let noise       = strengthKey === 'subtle' ? 0 : 4 * (k - 0.4);
+    let vignette    = strengthKey === 'dramatic' ? -14 : strengthKey === 'professional' ? -5 : 0;
 
     const round = v => Math.round(clamp(v, -100, 100));
     return {
@@ -223,16 +244,111 @@
     };
   }
 
+  /* ---- Additional quality scores --------------------------------------*/
+  // Sharpness quality: edge energy normalised to a 0–100 scale.
+  function sharpnessScore(s) {
+    return Math.round(clamp(((s.edgeEnergy || 0) / 36) * 100, 0, 100));
+  }
+
+  // Tonal balance: how evenly the histogram spans shadows / mids / highlights.
+  function tonalBalance(s) {
+    if (!s.histL) return 50;
+    const n = s.n || 1;
+    let sh = 0, mi = 0, hi = 0;
+    for (let i = 0;   i < 85;  i++) sh += s.histL[i];
+    for (let i = 85;  i < 171; i++) mi += s.histL[i];
+    for (let i = 171; i < 256; i++) hi += s.histL[i];
+    sh /= n; mi /= n; hi /= n;
+    // Ideal: roughly 20/60/20 distribution
+    const dev = Math.abs(sh - 0.20) + Math.abs(mi - 0.60) + Math.abs(hi - 0.20);
+    return Math.round(clamp(100 - dev * 150, 0, 100));
+  }
+
+  // Dynamic range: how fully the tonal range is used (black → white spread).
+  function dynamicRangeScore(s) {
+    const spread = (s.whitePoint || 255) - (s.blackPoint || 0);
+    return Math.round(clamp((spread / 220) * 100, 0, 100));
+  }
+
+  /* ---- Power enhance: aggressive scene-aware corrections ----------------
+   * Amplifies corrections proportional to detected severity. Use when the
+   * image needs a strong treatment rather than conservative polish.      */
+  function powerParams(s, strengthKey, scene) {
+    const base = autoParamsForScene(s, strengthKey, scene);
+    const m = s.meanL / 255;
+    const amp = (key, factor) => {
+      if (Math.abs(base[key] || 0) > 3)
+        base[key] = Math.round(clamp((base[key] || 0) * factor, -100, 100));
+    };
+    if (m < 0.38 || m > 0.62) { amp('exposure', 1.45); amp('shadows', 1.35); amp('highlights', 1.35); }
+    if ((s.stdL || 0) < 44) { amp('contrast', 1.4); amp('blacks', 1.3); amp('whites', 1.3); }
+    if ((s.sat  || 0) < 0.30) { amp('vibrance', 1.45); amp('saturation', 1.3); }
+    if ((s.edgeEnergy || 0) < 20) { amp('clarity', 1.5); amp('sharpness', 1.4); }
+    base.clarity   = Math.round(clamp((base.clarity   || 0) + 12, 0, 100));
+    base.sharpness = Math.round(clamp((base.sharpness || 0) + 14, 0, 100));
+    return base;
+  }
+
   /* ---- Scene-aware dispatcher -------------------------------------------
    * Use this instead of autoParams when the scene is known.             */
   function autoParamsForScene(s, strengthKey, scene) {
     if (scene && scene.isPortrait) return autoParamsPortrait(s, strengthKey);
-    return autoParams(s, strengthKey);
+    return autoParams(s, strengthKey, scene);
+  }
+
+  /* ---- Tonal profiles ---------------------------------------------------
+   * Returns 4 named correction sets adapted to actual pixel statistics.
+   * Each profile: id, name, icon, tags[], description, params{}           */
+  function tonalProfiles(s) {
+    const m   = (s.meanL   || 128) / 255;
+    const std = (s.stdL    || 40);
+    const bp  = s.blackPoint || 0;
+    const wp  = s.whitePoint || 255;
+    return [
+      {
+        id: 'sCurve', name: 'S-Curve', icon: '◉',
+        tags: ['Classic', 'Punchy'],
+        description: 'Classic S-curve: richens contrast while keeping midtones alive.',
+        params: {
+          contrast:   clamp(Math.round(24 + (45 - std) * 0.42), 16, 48),
+          blacks:     clamp(Math.round(-(bp - 4) * 0.9), -22, 5),
+          whites:     clamp(Math.round((252 - wp) * 0.44), 0, 22),
+          shadows:    clamp(Math.round((s.shadowClip || 0) * 110), 0, 16),
+          highlights: -clamp(Math.round((s.highClip || 0) * 110), 0, 14)
+        }
+      },
+      {
+        id: 'filmLift', name: 'Film Lift', icon: '◑',
+        tags: ['Cinematic', 'Matte'],
+        description: 'Lifted blacks, reduced contrast — the flat cinematic look.',
+        params: { blacks: 16, contrast: -16, highlights: -8, hlTint: 7, shTint: -10, saturation: -5 }
+      },
+      {
+        id: 'airy', name: 'Airy & Bright', icon: '○',
+        tags: ['Light', 'Soft'],
+        description: 'High-key and open — great for lifestyle, food and portraits.',
+        params: {
+          exposure:   clamp(Math.round((0.54 - m) * 110), -10, 24),
+          contrast: -10, whites: 18, shadows: 14, vibrance: 15, hlTint: 5
+        }
+      },
+      {
+        id: 'moody', name: 'Moody & Deep', icon: '●',
+        tags: ['Dark', 'Dramatic'],
+        description: 'Crushed blacks, high contrast, subdued color — brooding atmosphere.',
+        params: {
+          blacks:     clamp(Math.round(-(bp - 3) * 1.4), -32, -8),
+          contrast: 34, highlights: -20, shadows: -10,
+          saturation: -8, shTint: -14, clarity: 16
+        }
+      }
+    ];
   }
 
   global.Analysis = {
     STRENGTH, exposureScore, colorHarmonyScore, colorCast,
     detectIssues, whiteBalance, autoParams, autoParamsPortrait, autoParamsForScene,
-    explain, suggestCrop, cropRationale
+    explain, suggestCrop, cropRationale,
+    sharpnessScore, tonalBalance, dynamicRangeScore, powerParams, tonalProfiles
   };
 })(window);

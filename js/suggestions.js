@@ -88,9 +88,11 @@
       });
     }
 
-    // Composition / crop
+    // Composition / crop — skip for Night and Low Light where vertical
+    // brightness skew is natural (bright lights vs dark sky/ground).
     const comp = composition(s);
-    if (Math.abs(comp.vertSkew) > 0.18) {
+    const isNightScene = s.scene && (s.scene.isNight || s.scene.isLowLight);
+    if (Math.abs(comp.vertSkew) > 0.18 && !isNightScene) {
       const skyHeavy = comp.vertSkew > 0;
       out.push({
         id: 'crop', icon: 'crop', tag: 'Composition',
@@ -160,12 +162,20 @@
       dominantColors: s.dominant.slice(0, 3).map(c => `rgb(${c.r},${c.g},${c.b})`),
       bwSuitability: Math.round(mono * 100) + '%'
     };
+    const sceneStr = s.scene
+      ? ` Detected scene: ${s.scene.type} (${Math.round(s.scene.confidence * 100)}% confidence).`
+      : '';
+    const issueStr = s.issues && s.issues.length
+      ? ` Key issues detected: ${s.issues.map(i => i.label).join(', ')}.`
+      : '';
     const prompt =
-      'You are a senior travel-photography editor giving art direction. ' +
-      'Based ONLY on these measured statistics of one photo, write a concise, confident 2-3 sentence ' +
-      'editing note: the mood you would aim for, the single most important correction, and whether ' +
-      'a black-and-white treatment is worth trying. Do not use bullet points or headers. ' +
-      'Stats: ' + JSON.stringify(summary);
+      'You are a senior travel-photography editor giving concise, specific art direction. ' +
+      'Based ONLY on the measured statistics below, write exactly 2-3 sentences: ' +
+      '(1) The mood and visual treatment you would pursue given the scene type. ' +
+      '(2) The single most important technical correction and the reason for it. ' +
+      '(3) Whether a black-and-white or split-tone treatment is worth exploring, and why. ' +
+      'Be direct and specific. Do not use bullet points, headers, or filler phrases. ' +
+      'Stats: ' + JSON.stringify(summary) + sceneStr + issueStr;
     try {
       const text = await global.claude.complete({ messages: [{ role: 'user', content: prompt }] });
       return (text || '').trim();

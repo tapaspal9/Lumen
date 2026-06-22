@@ -70,13 +70,18 @@
                (hasPortraitSkin ? 0.35 : 0) },
 
       { type: 'Food', preset: 'fo_restaurant',
-        score: fam.warm * 0.65 + (s.sat > 0.38 ? 0.35 : 0) + (!topBright ? 0.25 : 0) +
-               (edge > 22 ? 0.2 : 0) - fam.blue * 0.8 -
-               (hasPortraitSkin ? 0.45 : 0) - (isNight ? 0.2 : 0) },
+        // Food: warm + saturated + center-bright + high edge detail (texture)
+        // but NOT heavily green (Nature) and NOT skin-dominant (Portrait).
+        score: fam.warm * 0.65 + (s.sat > 0.35 ? 0.40 : 0) + (s.sat > 0.46 ? 0.20 : 0) +
+               (!topBright ? 0.30 : 0) + (centerBright ? 0.22 : 0) + (edge > 22 ? 0.28 : 0) -
+               fam.blue * 0.90 - fam.green * 0.35 -
+               (hasPortraitSkin ? 0.65 : 0) - (isNight ? 0.25 : 0) },
 
       { type: 'Portrait', preset: 'po_natural', isPortrait: true,
-        score: fam.skin * 1.85 + (hasPortraitSkin ? 1.2 : 0) + (!topBright ? 0.2 : 0) -
-               (m < 0.2 ? 0.4 : 0) },
+        // topBright is a sky signal — penalise it so portrait doesn't win
+        // on golden-background shots where Sunset also scores high.
+        score: fam.skin * 1.85 + (hasPortraitSkin ? 1.2 : 0) + (!topBright ? 0.30 : 0) -
+               (topBright ? 0.28 : 0) - (m < 0.2 ? 0.4 : 0) - (isNight ? 0.25 : 0) },
 
       { type: 'Night', preset: 'ar_night_city',
         score: (isNight ? 1.6 : 0) + (m < 0.28 && !isNight ? 0.4 : 0) },
@@ -92,7 +97,9 @@
 
     C.sort((a, b) => b.score - a.score);
     const best = C[0], second = C[1];
-    const conf = clamp(0.44 + (best.score - second.score) * 0.55 + best.score * 0.14, 0.38, 0.97);
+    // Lower base offset so weak detections honestly show lower confidence;
+    // higher gap multiplier rewards clear winners more strongly.
+    const conf = clamp(0.36 + (best.score - second.score) * 0.62 + best.score * 0.12, 0.30, 0.95);
 
     return {
       type:         best.type,

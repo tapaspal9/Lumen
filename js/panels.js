@@ -7,6 +7,7 @@
   const $ = s => document.querySelector(s);
   let intensity = 0.8;
   let aiEnabled = true;
+  let presetLayerMode = false;
 
   const ICONS = {
     sun:      '<path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/>',
@@ -125,7 +126,8 @@
       ? Presets.recommendFor(entry.stats.scene.type)
       : [];
 
-    box.innerHTML = '<div class="preset-cats" id="presetCats"></div>' +
+    box.innerHTML =
+      '<div class="preset-cats" id="presetCats"></div>' +
       `<div class="intensity" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2)">
          <div class="row"><span class="name">Intensity</span><span class="num" id="intVal">${Math.round(intensity * 100)}%</span></div>
          <input type="range" id="intRange" min="0" max="100" step="1" value="${Math.round(intensity * 100)}">
@@ -185,10 +187,22 @@
   function applyPreset(id) {
     const e = Lumen.getCurrentEntry(); if (!e) return;
     const scene  = e.stats && e.stats.scene;
-    const params = Presets.build(id, e.stats, intensity, scene);
-    Lumen.applyParamsTo(e, params, { preset: { id, intensity } });
-    const p = Presets.byId(id);
-    Lumen.toast(`${p ? p.name : id} · ${Math.round(intensity * 100)}%`);
+    if (presetLayerMode) {
+      // Layer mode: add preset creative delta directly on top of current params
+      const preset = Presets.byId(id);
+      if (!preset) return;
+      const delta = {};
+      for (const k in (preset.creative || {})) {
+        delta[k] = Math.round((preset.creative[k] || 0) * intensity);
+      }
+      Lumen.mergeParamsTo(e, delta);
+      Lumen.toast(`Layered: ${preset.name} · ${Math.round(intensity * 100)}%`);
+    } else {
+      const params = Presets.build(id, e.stats, intensity, scene);
+      Lumen.applyParamsTo(e, params, { preset: { id, intensity } });
+      const p = Presets.byId(id);
+      Lumen.toast(`${p ? p.name : id} · ${Math.round(intensity * 100)}%`);
+    }
   }
 
   function highlightPreset(e) {
@@ -210,6 +224,11 @@
     $('#aiToggle').onchange = e => { aiEnabled = e.target.checked; renderSuggestions(Lumen.getCurrentEntry()); };
   }
 
+  const SCENE_TYPES = [
+    'Landscape','Nature','Beach & Water','Sunset / Golden Hour',
+    'City & Architecture','Portrait','Food','Indoor','Night','Low Light'
+  ];
+
   function renderSuggestions(entry) {
     const box = $('#suggestBody');
     if (!entry) { box.innerHTML = ''; return; }
@@ -219,7 +238,25 @@
     }
     const list = Suggestions.build(entry.stats);
     const canAI = Suggestions.available();
+    const scene = entry.stats && entry.stats.scene;
+
+    // Scene feedback row — lets the user correct a misdetection inline
+    const sceneFbHtml = scene ? `
+      <div class="scene-fb">
+        <button class="scene-fb-toggle" id="sceneFbToggle">
+          ${icon('wand')} <b>${scene.type}</b>
+          <span class="scene-fb-conf">${Math.round(scene.confidence * 100)}%</span>
+          <span class="scene-fb-hint">Wrong?</span>
+        </button>
+        <div class="sp-grid" id="scenePicker" style="display:none">
+          ${SCENE_TYPES.map(t =>
+            `<button class="sp-btn${t === scene.type ? ' on' : ''}" data-t="${t}">${t}</button>`
+          ).join('')}
+        </div>
+      </div>` : '';
+
     box.innerHTML =
+      sceneFbHtml +
       `<div class="ai-intro">Lumen inspected this frame and recommends ${list.length} adjustment${list.length !== 1 ? 's' : ''}. Apply only what you like.</div>` +
       list.map((s, i) =>
         `<div class="sug" data-i="${i}">
@@ -234,6 +271,31 @@
       (canAI
         ? `<button class="ai-ask" id="aiAsk">${icon('wand')} Ask Lumen AI for art direction</button><div class="ai-note" id="aiNote" style="display:none"></div>`
         : `<div class="ai-note-hint">Connect Lumen AI for natural-language art direction.</div>`);
+
+    // Wire scene correction picker
+    const toggle = $('#sceneFbToggle'), picker = $('#scenePicker');
+    if (toggle && picker) {
+      toggle.onclick = () => {
+        picker.style.display = picker.style.display === 'none' ? 'grid' : 'none';
+      };
+      picker.querySelectorAll('.sp-btn').forEach(btn => {
+        btn.onclick = () => {
+          const e = Lumen.getCurrentEntry(); if (!e || !e.stats) return;
+          const orig = e.stats.scene || {};
+          e.stats.scene = Object.assign({}, orig, {
+            type: btn.dataset.t, confidence: 0.95,
+            isPortrait: btn.dataset.t === 'Portrait',
+            isNight:    btn.dataset.t === 'Night',
+            isLowLight: btn.dataset.t === 'Low Light',
+            preset: (window.Presets && Presets.recommendFor(btn.dataset.t)[0]) || orig.preset
+          });
+          picker.style.display = 'none';
+          Lumen.toast(`Scene \u2192 ${btn.dataset.t}`);
+          renderSuggestions(e);
+          buildPresets();
+        };
+      });
+    }
 
     box.querySelectorAll('.sug').forEach(card => {
       const s = list[+card.dataset.i];
@@ -271,6 +333,7 @@
     init()              { buildPresets(); buildSuggestHeader(); },
     onSelect(entry)     { highlightPreset(entry); renderSuggestions(entry); buildPresets(); },
     onParamsChanged(e)  { highlightPreset(e); },
-    onAutoClick,        // intercepts the Auto-Enhance button
+    onAutoClick,
+    setLayerMode(v)     { presetLayerMode = !!v; },
   };
 })();

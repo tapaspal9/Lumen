@@ -25,7 +25,7 @@
     const histL = new Float32Array(256);
     let sumR = 0, sumG = 0, sumB = 0, sumL = 0, sumSat = 0;
     let shadowClip = 0, highClip = 0;
-    const buckets = new Float32Array(64); // 4x4x4 color cube
+    const buckets = new Float32Array(4096); // 16×16×16 color cube — 16-value bins per channel
     const luma = new Float32Array(n);
     // region brightness accumulators (composition signals)
     let tSum = 0, tC = 0, bSum = 0, bC = 0, lSum = 0, lC = 0, rSum = 0, rC = 0, cSum = 0, cC = 0;
@@ -49,8 +49,8 @@
       sumSat += mx === 0 ? 0 : (mx - mn) / mx;
       if (Li < 6) shadowClip++;
       if (Li > 249) highClip++;
-      const bi = ((r >> 6) << 4) | ((g >> 6) << 2) | (b >> 6);
-      buckets[bi] += (mx - mn > 24 ? 1.6 : 1);
+      const bi = (r >> 4) * 256 + (g >> 4) * 16 + (b >> 4);
+      buckets[bi] += (mx - mn > 16 ? 1.6 : 1);
       const x = p % w, y = (p / w) | 0;
       if (y < hh) { tSum += L; tC++; } else { bSum += L; bC++; }
       if (x < hw) { lSum += L; lC++; } else { rSum += L; rC++; }
@@ -105,13 +105,15 @@
   }
 
   function dominant(buckets, n) {
-    const idx = Array.from(buckets.keys()).sort((a, b) => buckets[b] - buckets[a]).slice(0, 7);
-    return idx.filter(i => buckets[i] > n * 0.012).map(i => ({
-      r: ((i >> 4) & 3) * 64 + 32,
-      g: ((i >> 2) & 3) * 64 + 32,
-      b: (i & 3) * 64 + 32,
+    // 16×16×16 cube: 16-value bins — 64× finer than original 4×4×4.
+    // Threshold halved again vs 8×8×8 because pixels spread across 4× more buckets.
+    const idx = Array.from(buckets.keys()).sort((a, b) => buckets[b] - buckets[a]).slice(0, 20);
+    return idx.filter(i => buckets[i] > n * 0.003).map(i => ({
+      r: Math.floor(i / 256) * 16 + 8,
+      g: Math.floor((i % 256) / 16) * 16 + 8,
+      b: (i % 16) * 16 + 8,
       weight: buckets[i] / n
-    })).slice(0, 5);
+    })).slice(0, 7);
   }
 
   /* Lightweight histogram only (for live updates) */
@@ -169,7 +171,14 @@
   const DEFAULTS = {
     exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
     temperature: 0, tint: 0, saturation: 0, vibrance: 0,
-    sharpness: 0, clarity: 0, noise: 0, vignette: 0, bw: 0
+    sharpness: 0, clarity: 0, noise: 0, vignette: 0, bw: 0,
+    // Split toning: +100 = warm orange/amber, −100 = cool teal/blue
+    hlTint: 0, shTint: 0,
+    // Radial local adjustment mask (maskR / maskFeather are 0–100 scale)
+    maskCx: 0.5, maskCy: 0.5, maskR: 45, maskFeather: 25, maskInvert: 0,
+    localExp: 0, localSat: 0,
+    // HSL Color Mixer: per-hue saturation boost/cut (−100 to +100)
+    redSat: 0, orangeSat: 0, yellowSat: 0, greenSat: 0, cyanSat: 0, blueSat: 0, purpleSat: 0
   };
 
   function process(src, params, out) {
@@ -211,19 +220,55 @@
 
     const satN = p.saturation / 100, vibN = p.vibrance / 100, vig = p.vignette / 100;
     const bwAmt = (p.bw || 0) / 100;
-    const cx = w / 2, cy = h / 2, maxD = Math.sqrt(cx * cx + cy * cy);
+    const cx = w / 2, cy = h / 2;
+    // HSL Color Mixer — precomputed per-hue gain values
+    const hmR = (p.redSat    || 0) / 100, hmO = (p.orangeSat || 0) / 100;
+    const hmY = (p.yellowSat || 0) / 100, hmG = (p.greenSat  || 0) / 100;
+    const hmC = (p.cyanSat   || 0) / 100, hmB = (p.blueSat   || 0) / 100;
+    const hmP = (p.purpleSat || 0) / 100;
+    const hasHueMix = !!(hmR || hmO || hmY || hmG || hmC || hmB || hmP);
+    // Split toning: positive = warm (orange/amber), negative = cool (teal/blue)
+    const hlT = (p.hlTint || 0) / 100, shT = (p.shTint || 0) / 100;
+    // Local radial mask
+    const hasLocal = (p.localExp || 0) !== 0 || (p.localSat || 0) !== 0;
+    const mCx = p.maskCx != null ? p.maskCx : 0.5;
+    const mCy = p.maskCy != null ? p.maskCy : 0.5;
+    const mR  = (p.maskR  != null ? p.maskR  : 45)  / 100;
+    const mF  = (p.maskFeather != null ? p.maskFeather : 25) / 100;
+    const mInv = !!(p.maskInvert);
+    const lExp = (p.localExp || 0) / 100, lSat = (p.localSat || 0) / 100;
 
     for (let i = 0, j = 0; i < N; i++, j += 4) {
       let r = br[i], g = bg[i], b = bb[i];
+
+      // — Edge-preserving noise reduction —
+      // Smooth only uniform/flat areas; full sharpness preserved on edges.
+      // Secondary chroma pass removes colour speckles even near edges.
       if (noise > 0) {
-        r += (sr[i] - r) * noise * 0.8; g += (sg[i] - g) * noise * 0.8; b += (sb[i] - b) * noise * 0.8;
+        const edgeMag = Math.abs(br[i]-sr[i]) + Math.abs(bg[i]-sg[i]) + Math.abs(bb[i]-sb[i]);
+        const smoothW = clamp(1 - edgeMag / (0.055 + noise * 0.018), 0, 1) * noise * 0.85;
+        r += (sr[i] - r) * smoothW; g += (sg[i] - g) * smoothW; b += (sb[i] - b) * smoothW;
+        const lumN = 0.299 * r + 0.587 * g + 0.114 * b;
+        const cStr = noise * 0.30;
+        r -= (r - lumN) * cStr; g -= (g - lumN) * cStr; b -= (b - lumN) * cStr;
       }
+
+      // — Midtone-only clarity —
+      // Peaks at 0.5 luminance and fades to zero at extreme shadows + highlights
+      // so blown whites and crushed blacks are completely unaffected.
       if (clarity !== 0) {
-        r += (r - lr[i]) * clarity * 0.9; g += (g - lg[i]) * clarity * 0.9; b += (b - lb[i]) * clarity * 0.9;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        const midW = smoothstep(0.08, 0.35, lum) * (1 - smoothstep(0.65, 0.92, lum));
+        const cAmt = clarity * 0.9 * midW;
+        r += (r - lr[i]) * cAmt; g += (g - lg[i]) * cAmt; b += (b - lb[i]) * cAmt;
       }
+
+      // — Sharpness (high-frequency unsharp mask) —
       if (sharp > 0) {
         r += (r - sr[i]) * sharp * 1.2; g += (g - sg[i]) * sharp * 1.2; b += (b - sb[i]) * sharp * 1.2;
       }
+
+      // — Saturation + Vibrance —
       if (satN !== 0 || vibN !== 0) {
         const L = 0.299 * r + 0.587 * g + 0.114 * b;
         const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
@@ -231,16 +276,100 @@
         const f = 1 + satN + vibN * (1 - clamp(cs, 0, 1));
         r = L + (r - L) * f; g = L + (g - L) * f; b = L + (b - L) * f;
       }
+
+      // — HSL Color Mixer: per-hue saturation —
+      // Derives the pixel's hue, blends weighted per-band boosts, applies saturation.
+      // Skips achromatic pixels (delta < 0.025). Only runs when a hue param is non-zero.
+      if (hasHueMix) {
+        const mxH = Math.max(r,g,b), mnH = Math.min(r,g,b), dH = mxH - mnH;
+        if (dH > 0.025) {
+          let hue;
+          if (mxH === r)      hue = ((g - b) / dH * 60 + 360) % 360;
+          else if (mxH === g) hue = (b - r) / dH * 60 + 120;
+          else                hue = (r - g) / dH * 60 + 240;
+          // Circular distance from hue to a peak (0..180)
+          const hd = (pk) => { const x = ((hue - pk + 540) % 360); return x > 180 ? 360 - x : x; };
+          // Soft bell weight: 1 at peak, 0 at ±width degrees
+          const hw = (pk, w2) => Math.max(0, 1 - hd(pk) / w2);
+          const wR = hw(0, 28) + hw(360, 28); // red wraps around 0/360
+          const wO = hw(30,  26), wY = hw(60,  28);
+          const wG = hw(120, 38), wC = hw(180, 30);
+          const wB = hw(240, 38), wP = hw(300, 30);
+          const tot = wR + wO + wY + wG + wC + wB + wP;
+          if (tot > 0.001) {
+            const boost = (wR*hmR + wO*hmO + wY*hmY + wG*hmG + wC*hmC + wB*hmB + wP*hmP) / tot;
+            if (Math.abs(boost) > 0.001) {
+              const Lh = 0.299*r + 0.587*g + 0.114*b;
+              r = Lh + (r - Lh) * (1 + boost);
+              g = Lh + (g - Lh) * (1 + boost);
+              b = Lh + (b - Lh) * (1 + boost);
+            }
+          }
+        }
+      }
+
+      // — Split toning: per-zone hue bias —
+      // Positive = warm (push red/amber), negative = cool (push teal/blue).
+      if (hlT !== 0 || shT !== 0) {
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        const hw  = smoothstep(0.42, 0.85, lum);        // highlights weight
+        const sw2 = 1 - smoothstep(0.15, 0.58, lum);    // shadows weight
+        if (hlT !== 0) {
+          r += hlT > 0 ? hlT*hw*0.060 : hlT*hw*0.030;
+          g += hlT > 0 ? hlT*hw*0.015 : hlT*hw*0.005;
+          b -= hlT > 0 ? hlT*hw*0.050 : hlT*hw*0.080;
+        }
+        if (shT !== 0) {
+          r += shT > 0 ? shT*sw2*0.060 : shT*sw2*0.030;
+          g += shT > 0 ? shT*sw2*0.015 : shT*sw2*0.005;
+          b -= shT > 0 ? shT*sw2*0.050 : shT*sw2*0.080;
+        }
+      }
+
+      // — Black & white conversion —
       if (bwAmt > 0) {
         const gray = 0.299 * r + 0.587 * g + 0.114 * b;
         r += (gray - r) * bwAmt; g += (gray - g) * bwAmt; b += (gray - b) * bwAmt;
       }
-      if (vig !== 0) {
-        const dx = (i % w) - cx, dy = ((i / w) | 0) - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy) / maxD;
-        const m = 1 + vig * 0.9 * (0.5 - dist);
-        r *= m; g *= m; b *= m;
+
+      // — Local radial adjustment mask —
+      // Soft-edged circle lets users selectively expose or saturate a zone.
+      // maskCx/maskCy are 0–1 normalised; maskR/maskFeather are 0–100 scale.
+      if (hasLocal) {
+        const px = i % w, py = (i / w) | 0;
+        const dx = px / w - mCx, dy = py / h - mCy;
+        const d2 = Math.sqrt(dx * dx + dy * dy);
+        const hw2 = mF * 0.5;
+        let maskW = 1 - smoothstep(mR - hw2, mR + hw2, d2);
+        if (mInv) maskW = 1 - maskW;
+        if (maskW > 0.001) {
+          if (lExp !== 0) {
+            const ef = Math.pow(2, lExp * 1.6);
+            r = clamp(r * (1 + (ef - 1) * maskW), 0, 1);
+            g = clamp(g * (1 + (ef - 1) * maskW), 0, 1);
+            b = clamp(b * (1 + (ef - 1) * maskW), 0, 1);
+          }
+          if (lSat !== 0) {
+            const Ll = 0.299 * r + 0.587 * g + 0.114 * b;
+            const sf = 1 + lSat * maskW;
+            r = Ll + (r - Ll) * sf; g = Ll + (g - Ll) * sf; b = Ll + (b - Ll) * sf;
+          }
+        }
       }
+
+      // — Elliptical luminance-space vignette —
+      // Fixed sign: negative vig darkens edges (traditional vignette).
+      // Elliptical distance is aspect-ratio-aware; smooth sigmoid falloff.
+      // Multiplies all channels equally → no hue shift at large amounts.
+      if (vig !== 0) {
+        const px = i % w, py = (i / w) | 0;
+        const dnx = (px - cx) / cx, dny = (py - cy) / cy;
+        const distN = Math.sqrt(dnx * dnx + dny * dny);
+        const falloff = smoothstep(0.40, 1.0, distN);
+        const ratio = clamp(1 + vig * 0.85 * falloff, 0, 3);
+        r = clamp(r * ratio, 0, 1); g = clamp(g * ratio, 0, 1); b = clamp(b * ratio, 0, 1);
+      }
+
       o[j] = clamp(r * 255, 0, 255);
       o[j + 1] = clamp(g * 255, 0, 255);
       o[j + 2] = clamp(b * 255, 0, 255);
@@ -273,4 +402,5 @@
   }
 
   global.Imaging = { analyze, quickHist, process, DEFAULTS, clamp, smoothstep, coverScale, straightenedCanvas };
-})(window);
+// Compatible with both browser main thread and Web Workers
+})(typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : self);

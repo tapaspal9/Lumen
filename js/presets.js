@@ -280,19 +280,45 @@
     const preset = byId(presetId);
     if (!preset) return Object.assign({}, Imaging.DEFAULTS);
     const usePortrait = preset.portraitSafe || (scene && scene.isPortrait);
+    // Use scene-aware base correction when available
     const corr = (usePortrait && window.Analysis && Analysis.autoParamsPortrait)
       ? Analysis.autoParamsPortrait(stats, 'natural')
-      : Analysis.autoParams(stats, 'natural');
+      : (window.Analysis && Analysis.autoParamsForScene)
+        ? Analysis.autoParamsForScene(stats, 'natural', scene)
+        : Analysis.autoParams(stats, 'natural');
+
+    // Creative strength: average absolute value of the creative delta.
+    // Strong creative presets reduce auto-correction weight so their artistic
+    // intent isn't diluted by conflicting corrective values.
+    const cr = preset.creative || {};
+    const crKeys = Object.keys(cr);
+    const crStrength = crKeys.length
+      ? crKeys.reduce((s, k) => s + Math.abs(cr[k] || 0), 0) / crKeys.length
+      : 0;
+    // corrWeight: 1.0 for neutral/natural presets → ~0.35 for very strong creative
+    const corrWeight = clamp(1.0 - (crStrength - 8) * 0.028, 0.35, 1.0);
+
     const merged = Object.assign({}, Imaging.DEFAULTS);
-    [corr, preset.creative].forEach(src => {
-      for (const k in src) merged[k] = clamp((merged[k] || 0) + (src[k] || 0), k === 'bw' ? 0 : -100, 100);
-    });
-    const k = clamp(intensity, 0, 1);
+    // Apply weighted correction base
+    for (const k in corr) {
+      merged[k] = clamp((corr[k] || 0) * corrWeight, k === 'bw' ? 0 : -100, 100);
+    }
+    // Apply creative delta. When correction and creative fight on the same
+    // parameter (opposite signs), the creative value wins with a slight boost
+    // so the preset's character is preserved.
+    for (const k in cr) {
+      const base  = merged[k] || 0;
+      const delta = cr[k]     || 0;
+      const fighting = base !== 0 && (base > 0) !== (delta > 0);
+      merged[k] = clamp(base + delta * (fighting ? 1.25 : 1.0), k === 'bw' ? 0 : -100, 100);
+    }
+
+    const kInt = clamp(intensity, 0, 1);
     const out = {};
     for (const key in merged) {
       out[key] = key === 'bw'
-        ? (preset.mono ? merged.bw : Math.round(merged.bw * k))
-        : Math.round(clamp(merged[key] * k, -100, 100));
+        ? (preset.mono ? merged.bw : Math.round(merged.bw * kInt))
+        : Math.round(clamp(merged[key] * kInt, -100, 100));
     }
     return out;
   }

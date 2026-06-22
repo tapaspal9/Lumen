@@ -10,17 +10,29 @@
   const EXPORT_MAX = 2560;    // web-optimized export cap
 
   const SLIDER_GROUPS = [
-    { title: 'Light', keys: ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks'] },
-    { title: 'Color', keys: ['temperature', 'tint', 'saturation', 'vibrance'] },
-    { title: 'Detail', keys: ['clarity', 'sharpness', 'noise'] },
-    { title: 'Effects', keys: ['vignette'] }
+    { title: 'Light',     keys: ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks'] },
+    { title: 'Color',     keys: ['temperature', 'tint', 'saturation', 'vibrance'] },
+    { title: 'Color Mix', keys: ['redSat', 'orangeSat', 'yellowSat', 'greenSat', 'cyanSat', 'blueSat', 'purpleSat'] },
+    { title: 'Detail',    keys: ['clarity', 'sharpness', 'noise'] },
+    { title: 'Toning',    keys: ['hlTint', 'shTint'] },
+    { title: 'Local',     keys: ['localExp', 'localSat', 'maskR', 'maskFeather'] },
+    { title: 'Effects',   keys: ['vignette'] }
   ];
   const LABELS = {
     exposure: 'Exposure', contrast: 'Contrast', highlights: 'Highlights', shadows: 'Shadows',
     whites: 'Whites', blacks: 'Blacks', temperature: 'Temperature', tint: 'Tint',
     saturation: 'Saturation', vibrance: 'Vibrance', clarity: 'Clarity', sharpness: 'Sharpness',
-    noise: 'Noise reduction', vignette: 'Vignette'
+    noise: 'Noise reduction', vignette: 'Vignette',
+    hlTint: 'Highlight tint', shTint: 'Shadow tint',
+    localExp: 'Local exposure', localSat: 'Local saturation',
+    maskR: 'Mask radius', maskFeather: 'Mask feather',
+    redSat: 'Reds', orangeSat: 'Oranges', yellowSat: 'Yellows',
+    greenSat: 'Greens', cyanSat: 'Cyans', blueSat: 'Blues', purpleSat: 'Purples'
   };
+
+  // Non-standard ranges / non-zero default values for specific params
+  const SLIDER_RANGE = { maskR: [0, 100], maskFeather: [0, 100] };
+  const SLIDER_INIT  = { maskR: 45, maskFeather: 25 };
 
   /* ---- State ------------------------------------------------------------*/
   const library = [];   // { id, name, url, img, w, h, params, strength, edited, stats, history }
@@ -29,6 +41,10 @@
   // active preview buffers
   let origData = null, dispData = null, pw = 0, ph = 0;
   let rafPending = false;
+  // Web Worker for off-main-thread image processing
+  let worker = null, workerBusy = false, pendingRender = false, renderSeq = 0;
+  // Auto-enhance accumulate mode
+  let stackMode = false;
 
   const els = {
     stage: $('#stage'), main: $('#main'), film: $('#film'), filmList: $('#filmList'),
@@ -113,8 +129,16 @@
     return entry;
   }
 
+  const RAW_EXTS = new Set(['.cr2','.cr3','.nef','.arw','.dng','.raf','.orf','.rw2','.pef','.srw','.3fr','.rw1','.iiq']);
   function loadFiles(files) {
-    const imgs = [...files].filter(f => f.type.startsWith('image/'));
+    const allFiles = [...files];
+    const rawFiles = allFiles.filter(f => RAW_EXTS.has((f.name.toLowerCase().match(/\.[^.]+$/) || [''])[0]));
+    const imgs = allFiles.filter(f => f.type.startsWith('image/'));
+    if (rawFiles.length && !imgs.length) {
+      toast(`${rawFiles.length} RAW file${rawFiles.length > 1 ? 's' : ''} detected — convert to DNG or JPEG first for full editing`);
+      return;
+    }
+    if (rawFiles.length) toast(`${rawFiles.length} RAW file${rawFiles.length > 1 ? 's' : ''} skipped — JPEG / PNG / WebP / HEIC supported`);
     if (!imgs.length) return;
     const firstNew = library.length;
     let pending = imgs.length;
@@ -173,7 +197,7 @@
       t.onclick = () => selectImage(i);
       els.filmList.appendChild(t);
     });
-    els.main.classList.toggle('solo', library.length <= 1);
+    els.main.classList.toggle('solo', library.length === 0);
     if (window.Dashboard) Dashboard.refresh();
   }
 
@@ -195,6 +219,8 @@
 
   // (Re)build the active preview buffers from the entry's current crop + analyze.
   function loadWorking(e) {
+    // Migrate: ensure every default key exists (photos added before new params were created)
+    e.params = Object.assign({}, Imaging.DEFAULTS, e.params);
     const ws = buildWorkingSource(e, PREVIEW_MAX);
     origData = ws.data; pw = ws.w; ph = ws.h;
     dispData = new ImageData(pw, ph);
@@ -206,36 +232,126 @@
     populateAnalysis(e.stats);
     populateMeta(e);
     buildSliders();
+    highlightColorMixSliders(e.stats);
     render();
     renderExplanation(e);
     if (window.Panels) Panels.onSelect(e);
   }
 
   /* ---- Render pipeline ---------------------------------------------------*/
-  function render() {
-    if (current < 0 || !origData) return;
-    const e = library[current];
-    Imaging.process(origData, e.params, dispData);
-    actx.putImageData(dispData, 0, 0);
-    const h = Imaging.quickHist(dispData);
+  function flushHistograms(imgData) {
+    const h = Imaging.quickHist(imgData);
     Histogram.render($('#histRGB'), h, 'rgb');
     Histogram.render($('#histLuma'), h, 'luma');
   }
+
+  function render() {
+    if (current < 0 || !origData) return;
+    const e = library[current];
+    if (worker && !workerBusy) {
+      // Off-main-thread: keeps UI smooth during slider drags on large images
+      workerBusy = true;
+      const srcBuf = origData.data.buffer.slice(0);  // copy; origData stays intact
+      const outBuf = new ArrayBuffer(pw * ph * 4);
+      const rid = ++renderSeq;
+      worker.postMessage(
+        { srcBuf, outBuf, width: pw, height: ph, params: Object.assign({}, e.params), id: rid },
+        [srcBuf, outBuf]
+      );
+    } else if (worker && workerBusy) {
+      pendingRender = true;  // worker busy — re-render with latest params when free
+    } else {
+      // Synchronous fallback (no worker or worker failed to load)
+      Imaging.process(origData, e.params, dispData);
+      actx.putImageData(dispData, 0, 0);
+      flushHistograms(dispData);
+    }
+  }
+
   function scheduleRender() {
     if (rafPending) return;
     rafPending = true;
     requestAnimationFrame(() => { rafPending = false; render(); });
   }
 
+  /* ---- Web Worker setup -------------------------------------------------*/
+  function setupWorker() {
+    try {
+      worker = new Worker('js/workers/imaging-worker.js');
+      worker.onmessage = function ({ data }) {
+        workerBusy = false;
+        if (data.error) { console.warn('[Lumen] Worker error:', data.error); worker = null; render(); return; }
+        if (data.id === renderSeq && current >= 0) {
+          const arr = new Uint8ClampedArray(data.outBuf);
+          dispData = new ImageData(arr, pw, ph);
+          actx.putImageData(dispData, 0, 0);
+          flushHistograms(dispData);
+        }
+        if (pendingRender) { pendingRender = false; render(); }
+      };
+      worker.onerror = function (err) {
+        console.warn('[Lumen] Worker unavailable — main thread fallback:', err.message || err);
+        worker = null; workerBusy = false; render();
+      };
+    } catch (err) {
+      console.warn('[Lumen] Web Worker not supported:', err);
+      worker = null;
+    }
+  }
+
   /* ---- Analysis panel ---------------------------------------------------*/
+  function _buildQuickFix(s) {
+    const box = $('#quickFix'); if (!box) return;
+    const expS   = Analysis.exposureScore(s);
+    const harmS  = Analysis.colorHarmonyScore(s);
+    const sharpS = Analysis.sharpnessScore ? Analysis.sharpnessScore(s) : 100;
+    const toneS  = Analysis.tonalBalance   ? Analysis.tonalBalance(s)   : 100;
+    const fixes = [];
+    if (expS  < 70)  fixes.push({ label: 'Fix exposure',  type: 'exposure', sev: expS  < 45 ? 2 : 1 });
+    if (harmS < 65)  fixes.push({ label: 'Fix color',     type: 'color',    sev: harmS < 40 ? 2 : 1 });
+    if (sharpS < 50) fixes.push({ label: 'Sharpen',       type: 'sharp',    sev: 1 });
+    if (toneS  < 55) fixes.push({ label: 'Balance tones', type: 'tones',    sev: 1 });
+    box.innerHTML = fixes.length
+      ? fixes.map(f => `<button class="qfix-btn sev${f.sev}" data-type="${f.type}">${f.label}</button>`).join('')
+      : `<span class="qfix-ok">✓ Well balanced</span>`;
+    box.querySelectorAll('.qfix-btn').forEach(b => b.onclick = () => applyQuickFix(b.dataset.type, s));
+  }
+
+  function applyQuickFix(type, s) {
+    const e = getCurrentEntry(); if (!e) return;
+    pushHistory();
+    const k = s || e.stats;
+    const auto = Analysis.autoParams(k, 'professional');
+    if (type === 'exposure') {
+      Object.assign(e.params, { exposure: auto.exposure, shadows: auto.shadows,
+        highlights: auto.highlights, blacks: auto.blacks, whites: auto.whites });
+    } else if (type === 'color') {
+      Object.assign(e.params, { temperature: auto.temperature, tint: auto.tint,
+        vibrance: auto.vibrance, saturation: auto.saturation });
+    } else if (type === 'sharp') {
+      e.params.clarity   = Imaging.clamp((e.params.clarity   || 0) + 20, 0, 100);
+      e.params.sharpness = Imaging.clamp((e.params.sharpness || 0) + 25, 0, 100);
+    } else if (type === 'tones') {
+      Object.assign(e.params, { contrast: auto.contrast, blacks: auto.blacks, whites: auto.whites });
+    }
+    e.edited = true;
+    syncSliders(); scheduleRender(); markEdited(); renderExplanation(e); commitEdit();
+    toast('Quick fix applied');
+  }
+
   function setScore(valEl, barEl, score) {
     valEl.innerHTML = score + '<small>/100</small>';
     barEl.style.width = score + '%';
     barEl.style.background = score >= 75 ? 'var(--ok)' : score >= 50 ? 'var(--warn)' : 'var(--bad)';
   }
   function populateAnalysis(s) {
-    setScore($('#expScore'), $('#expBar'), Analysis.exposureScore(s));
-    setScore($('#harmScore'), $('#harmBar'), Analysis.colorHarmonyScore(s));
+    setScore($('#expScore'),   $('#expBar'),   Analysis.exposureScore(s));
+    setScore($('#harmScore'),  $('#harmBar'),  Analysis.colorHarmonyScore(s));
+    if (Analysis.sharpnessScore && $('#sharpScore'))
+      setScore($('#sharpScore'), $('#sharpBar'), Analysis.sharpnessScore(s));
+    if (Analysis.tonalBalance && $('#toneScore'))
+      setScore($('#toneScore'),  $('#toneBar'),  Analysis.tonalBalance(s));
+    _buildQuickFix(s);
     // issues
     const issues = Analysis.detectIssues(s);
     $('#issues').innerHTML = issues.map(it =>
@@ -254,7 +370,136 @@
     const dom = s.dominant.length ? s.dominant : [{ r: s.meanR, g: s.meanG, b: s.meanB, weight: 1 }];
     const total = dom.reduce((a, c) => a + c.weight, 0) || 1;
     $('#domRow').innerHTML = dom.map(c =>
-      `<i style="width:${(c.weight / total * 100).toFixed(1)}%;background:rgb(${c.r},${c.g},${c.b})"></i>`).join('');
+      `<i style="width:${(c.weight / total * 100).toFixed(1)}%;background:rgb(${c.r},${c.g},${c.b})" title="rgb(${c.r},${c.g},${c.b})"></i>`).join('');
+    // wire score-card direct controls
+    wireScoreCtrl('#expCtrl',   'exposure',  0);
+    wireScoreCtrl('#harmCtrl',  'vibrance',  0);
+    wireScoreCtrl('#sharpCtrl', 'sharpness', 0);
+    wireScoreCtrl('#toneCtrl',  'contrast',  0);
+    buildTonalProfiles(s);
+  }
+
+  /* ---- Score-card direct controls ---------------------------------------*/
+  function wireScoreCtrl(inputId, paramKey, defVal) {
+    const inp = $(inputId); if (!inp) return;
+    if (current < 0) { inp.value = defVal; return; }
+    const e = library[current];
+    inp.value = e.params[paramKey] != null ? e.params[paramKey] : defVal;
+    inp.oninput = () => {
+      if (current < 0) return;
+      const ent = library[current];
+      ent.params[paramKey] = +inp.value;
+      // also drive the matching Adjust-panel slider so both stay in sync
+      const mirror = els.sliders.querySelector(`.slider[data-key="${paramKey}"] input`);
+      if (mirror) { mirror.value = inp.value; mirror.dispatchEvent(new Event('input')); }
+      else scheduleRender();
+    };
+    inp.onchange = () => { markEdited(); clearPreset(); commitEdit(); };
+  }
+
+  function syncScoreCardCtrls() {
+    if (current < 0) return;
+    const e = library[current];
+    const map = { '#expCtrl':'exposure','#harmCtrl':'vibrance','#sharpCtrl':'sharpness','#toneCtrl':'contrast' };
+    for (const [id, key] of Object.entries(map)) {
+      const inp = $(id); if (inp) inp.value = e.params[key] != null ? e.params[key] : 0;
+    }
+  }
+
+  /* ---- Tonal profile cards ----------------------------------------------*/
+  function buildTonalProfiles(s) {
+    const box = $('#tonalProfiles');
+    if (!box || !window.Analysis || !Analysis.tonalProfiles) return;
+    const profiles = Analysis.tonalProfiles(s);
+    box.innerHTML = profiles.map(p =>
+      `<div class="tp-card" data-pid="${p.id}">
+         <canvas class="tp-canvas" id="tpc_${p.id}" width="60" height="42"></canvas>
+         <div class="tp-info">
+           <div class="tp-name">${p.name}</div>
+           <div class="tp-tags">${p.tags.map(t => `<span>${t}</span>`).join('')}</div>
+           <div class="tp-desc">${p.description}</div>
+         </div>
+         <button class="tp-apply">Apply</button>
+       </div>`).join('');
+    profiles.forEach(prof => {
+      const c = document.getElementById(`tpc_${prof.id}`);
+      if (c) drawProfileCurve(c.getContext('2d'), prof.id, 60, 42);
+    });
+    box.querySelectorAll('.tp-card').forEach(card => {
+      const prof = profiles.find(p => p.id === card.dataset.pid);
+      if (!prof) return;
+      card.querySelector('.tp-apply').onclick = () => {
+        if (current < 0) return;
+        const e = library[current];
+        pushHistory();
+        Object.assign(e.params, prof.params);
+        e.edited = true; e.preset = null;
+        syncSliders(); scheduleRender(); markEdited(); commitEdit();
+        toast(`Profile: ${prof.name}`);
+        box.querySelectorAll('.tp-card').forEach(c2 => c2.classList.remove('tp-active'));
+        card.classList.add('tp-active');
+      };
+    });
+  }
+
+  function drawProfileCurve(ctx, id, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'oklch(0.17 0.005 270)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)'; ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
+    ctx.setLineDash([]);
+    const curves = {
+      sCurve:   [[0,h],[w*.18,h*.82],[w*.5,h*.5],[w*.82,h*.18],[w,0]],
+      filmLift: [[0,h*.86],[w*.25,h*.62],[w*.55,h*.40],[w*.82,h*.18],[w,h*.06]],
+      airy:     [[0,h*.90],[w*.28,h*.54],[w*.6,h*.26],[w*.85,h*.10],[w,0]],
+      moody:    [[0,h],[w*.18,h*.86],[w*.5,h*.50],[w*.82,h*.12],[w,0]]
+    };
+    const colors = { sCurve:'#8B9FE8', filmLift:'#C4A96E', airy:'#E8D8B8', moody:'#8090A0' };
+    const pts = curves[id] || curves.sCurve;
+    ctx.strokeStyle = colors[id] || '#8B9FE8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const cpx = (pts[i][0] + pts[i+1][0]) / 2;
+      const cpy = (pts[i][1] + pts[i+1][1]) / 2;
+      ctx.quadraticCurveTo(pts[i][0], pts[i][1], cpx, cpy);
+    }
+    ctx.lineTo(pts[pts.length-1][0], pts[pts.length-1][1]); ctx.stroke();
+  }
+
+  /* ---- Color Mix: highlight detected hue sliders ------------------------*/
+  function highlightColorMixSliders(s) {
+    if (!s || !s.dominant) return;
+    els.sliders.querySelectorAll('.slider[data-key]').forEach(w => w.classList.remove('color-detected'));
+    const hueKeys = [
+      { key: 'redSat',    peaks: [0, 360], w: 28 },
+      { key: 'orangeSat', peaks: [30],     w: 26 },
+      { key: 'yellowSat', peaks: [60],     w: 28 },
+      { key: 'greenSat',  peaks: [120],    w: 38 },
+      { key: 'cyanSat',   peaks: [180],    w: 30 },
+      { key: 'blueSat',   peaks: [240],    w: 38 },
+      { key: 'purpleSat', peaks: [300],    w: 30 }
+    ];
+    s.dominant.forEach(c => {
+      const r = c.r/255, g = c.g/255, b = c.b/255;
+      const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn;
+      if (d < 0.10 || c.weight < 0.04) return;
+      let hue;
+      if (mx===r) hue = ((g-b)/d*60+360)%360;
+      else if (mx===g) hue = (b-r)/d*60+120;
+      else hue = (r-g)/d*60+240;
+      const hd = (pk) => { const x = ((hue-pk+540)%360); return x>180?360-x:x; };
+      let best = null, bestDist = 999;
+      hueKeys.forEach(hk => {
+        const dist = Math.min(...hk.peaks.map(pk => hd(pk)));
+        if (dist < bestDist) { bestDist = dist; best = hk.key; }
+      });
+      if (best && bestDist < 45) {
+        const w = els.sliders.querySelector(`.slider[data-key="${best}"]`);
+        if (w) w.classList.add('color-detected');
+      }
+    });
   }
 
   /* ---- Camera metadata card ---------------------------------------------*/
@@ -305,31 +550,38 @@
   }
   function makeSlider(key) {
     const e = library[current];
+    const [min, max] = SLIDER_RANGE[key] || [-100, 100];
+    const defVal = SLIDER_INIT[key] != null ? SLIDER_INIT[key] : 0;
     const wrap = document.createElement('div');
     wrap.className = 'slider'; wrap.dataset.key = key;
     wrap.innerHTML =
-      `<div class="row"><span class="name">${LABELS[key]}</span><span class="num">0</span></div>
-       <input type="range" min="-100" max="100" step="1" value="0">`;
+      `<div class="row"><span class="name">${LABELS[key]}</span><span class="num">${defVal}</span></div>
+       <input type="range" min="${min}" max="${max}" step="1" value="${defVal}">`;
     const input = wrap.querySelector('input'), num = wrap.querySelector('.num');
     const set = (v, commit) => {
       v = Math.round(v);
-      e.params[key] = v; input.value = v; num.textContent = (v > 0 ? '+' : '') + v;
-      wrap.classList.toggle('changed', v !== 0);
+      e.params[key] = v; input.value = v;
+      num.textContent = defVal === 0 ? ((v > 0 ? '+' : '') + v) : v;
+      wrap.classList.toggle('changed', v !== defVal);
       if (commit) commitEdit();
       scheduleRender();
     };
     input.addEventListener('input', () => set(+input.value, false));
     input.addEventListener('change', () => { markEdited(); clearPreset(); commitEdit(); });
-    wrap.querySelector('.row').addEventListener('dblclick', () => { pushHistory(); set(0, true); markEdited(); clearPreset(); });
-    // initialize from current params
-    set(e.params[key] || 0, false);
+    wrap.querySelector('.row').addEventListener('dblclick', () => { pushHistory(); set(defVal, true); markEdited(); clearPreset(); });
+    // Init from current params — fallback to default if param is new on this entry
+    set(e.params[key] != null ? e.params[key] : defVal, false);
     wrap._set = set;
     return wrap;
   }
   function syncSliders() {
     if (current < 0) return;
     const e = library[current];
-    els.sliders.querySelectorAll('.slider').forEach(w => w._set(e.params[w.dataset.key] || 0, false));
+    els.sliders.querySelectorAll('.slider').forEach(w => {
+      const k = w.dataset.key;
+      const defV = SLIDER_INIT[k] != null ? SLIDER_INIT[k] : 0;
+      w._set(e.params[k] != null ? e.params[k] : defV, false);
+    });
   }
 
   /* ---- Edits / history --------------------------------------------------*/
@@ -339,7 +591,12 @@
       (c.h == null ? 1 : c.h) < 0.999 || Math.abs(c.angle || 0) > 0.01;
   }
   function computeEdited(e) {
-    return Object.keys(Imaging.DEFAULTS).some(k => (e.params[k] || 0) !== 0) || isCropped(e);
+    // Compare each param against its default (not against 0) so params like
+    // maskR=45 don't falsely mark a photo as edited.
+    return Object.keys(Imaging.DEFAULTS).some(k => {
+      const def = Imaging.DEFAULTS[k];
+      return (e.params[k] != null ? e.params[k] : def) !== def;
+    }) || isCropped(e);
   }
   function snapshot(e) { return { params: Object.assign({}, e.params), crop: Object.assign({}, e.crop) }; }
   function pushHistoryFor(e) { e.history.push(snapshot(e)); if (e.history.length > 40) e.history.shift(); }
@@ -361,9 +618,23 @@
   /* ---- Auto enhance -----------------------------------------------------*/
   function autoEnhance(entry, render2) {
     pushHistoryFor(entry);
-    entry.params = Analysis.autoParamsForScene
+    const newP = Analysis.autoParamsForScene
       ? Analysis.autoParamsForScene(entry.stats, entry.strength, entry.stats && entry.stats.scene)
       : Analysis.autoParams(entry.stats, entry.strength);
+    if (stackMode) {
+      // Stack: accumulate — add new corrections as a delta on top of current params
+      for (const k in newP) {
+        const def = Imaging.DEFAULTS[k] != null ? Imaging.DEFAULTS[k] : 0;
+        const delta = (newP[k] || 0) - def;
+        if (Math.abs(delta) > 1)
+          entry.params[k] = Math.round(Imaging.clamp(
+            (entry.params[k] != null ? entry.params[k] : def) + delta * 0.55,
+            k === 'bw' ? 0 : -100, 100
+          ));
+      }
+    } else {
+      entry.params = newP;
+    }
     entry.edited = true;
     entry.preset = null;
     if (render2) { syncSliders(); render(); renderExplanation(entry); if (window.Panels) Panels.onParamsChanged(entry); }
@@ -615,6 +886,31 @@
       if (current >= 0) library[current].strength = strength;
       if (window.Store) Store.saveSetting('strength', strength).catch(console.error);
     });
+    // Stack mode toggle
+    const stackToggle = document.getElementById('stackToggle');
+    if (stackToggle) stackToggle.onclick = () => {
+      stackMode = !stackMode;
+      stackToggle.classList.toggle('on', stackMode);
+      toast(stackMode ? 'Stack on — auto-enhance adds to current edit' : 'Stack off — auto-enhance replaces params');
+    };
+    // Power Enhance button
+    const powerBtn = document.getElementById('powerBtn');
+    if (powerBtn) powerBtn.onclick = () => {
+      if (current < 0) return;
+      const e = library[current]; e.strength = strength;
+      powerBtn.classList.add('busy'); progress(0.2);
+      setTimeout(() => {
+        pushHistoryFor(e);
+        e.params = Analysis.powerParams
+          ? Analysis.powerParams(e.stats, e.strength, e.stats && e.stats.scene)
+          : Analysis.autoParams(e.stats, 'dramatic');
+        e.edited = true; e.preset = null;
+        syncSliders(); render(); renderExplanation(e);
+        if (window.Panels) Panels.onParamsChanged(e);
+        renderFilm(); updateChrome(); powerBtn.classList.remove('busy'); progress(1);
+        toast('⚡ Power enhanced');
+      }, 120);
+    };
     // Mobile bottom nav
     document.getElementById('navLib')    .onclick = () => switchMobileTab('lib');
     document.getElementById('navEdit')   .onclick = () => switchMobileTab('edit');
@@ -639,7 +935,66 @@
     hold.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up);
     hold.addEventListener('pointerleave', up);
+    // Preset mode toggle (Replace / Layer) — now in auto-block, wired here
+    const modeReplace = document.getElementById('modeReplace');
+    const modeLayer   = document.getElementById('modeLayer');
+    if (modeReplace && modeLayer) {
+      modeReplace.onclick = () => {
+        if (window.Panels) Panels.setLayerMode(false);
+        modeReplace.classList.add('on'); modeLayer.classList.remove('on');
+        toast('Replace mode — preset replaces current edits');
+      };
+      modeLayer.onclick = () => {
+        if (window.Panels) Panels.setLayerMode(true);
+        modeLayer.classList.add('on'); modeReplace.classList.remove('on');
+        toast('Layer mode — preset stacks on top of current edits');
+      };
+    }
+
     initCompareDrag();
+
+    // Touch: pinch-to-zoom on the canvas (two-finger spread/pinch)
+    let pinchDist0 = 0, pinchScaleApplied = 1, pinchScaleCur = 1;
+    els.wrap.addEventListener('touchstart', ev => {
+      if (ev.touches.length === 2) {
+        ev.preventDefault();
+        pinchDist0 = Math.hypot(
+          ev.touches[0].clientX - ev.touches[1].clientX,
+          ev.touches[0].clientY - ev.touches[1].clientY
+        );
+      }
+    }, { passive: false });
+    els.wrap.addEventListener('touchmove', ev => {
+      if (ev.touches.length === 2) {
+        ev.preventDefault();
+        const d = Math.hypot(
+          ev.touches[0].clientX - ev.touches[1].clientX,
+          ev.touches[0].clientY - ev.touches[1].clientY
+        );
+        pinchScaleCur = Imaging.clamp(pinchScaleApplied * (d / pinchDist0), 0.5, 5);
+        els.wrap.style.transform = `scale(${pinchScaleCur.toFixed(3)})`;
+      }
+    }, { passive: false });
+    els.wrap.addEventListener('touchend', ev => {
+      if (ev.touches.length < 2) {
+        pinchScaleApplied = pinchScaleCur;
+        if (Math.abs(pinchScaleCur - 1) < 0.14) {
+          els.wrap.style.transform = ''; pinchScaleApplied = 1; pinchScaleCur = 1;
+        }
+      }
+    });
+    // Double-tap canvas to toggle before / after (mobile compare shortcut)
+    let lastTap = 0;
+    els.wrap.addEventListener('touchend', ev => {
+      if (ev.touches.length > 0) return;
+      const now = Date.now();
+      if (now - lastTap < 300 && current >= 0) {
+        els.wrap.classList.toggle('show-original');
+        ev.preventDefault();
+      }
+      lastTap = now;
+    });
+
     // keyboard
     window.addEventListener('keydown', ev => {
       if (ev.key === 'Escape') { $('#modal').classList.remove('show'); if (view === 'dashboard') switchView('editor'); }
@@ -735,6 +1090,7 @@
   };
 
   async function boot() {
+    setupWorker();
     bind();
     updateChrome();
     if (window.Panels) Panels.init();
